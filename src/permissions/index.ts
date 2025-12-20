@@ -1,0 +1,53 @@
+import { rule, shield, and } from 'graphql-shield';
+
+// Rule: User must be authenticated
+const isAuthenticated = rule({ cache: 'contextual' })(
+  async (parent, args, context) => {
+    if (!context.user) {
+      return new Error('You must be logged in to perform this action');
+    }
+    return true;
+  }
+);
+
+// Rule: User must own the resource
+const isOwner = rule({ cache: 'strict' })(
+  async (parent, args, context) => {
+    // For LifeScore type - check if the score belongs to the user
+    if (parent && parent.userId) {
+      return parent.userId === context.user?.id;
+    }
+    // For mutations - will check in resolver
+    return true;
+  }
+);
+
+// Permission rules
+export const permissions = shield(
+  {
+    Query: {
+      // Public queries
+      hello: true,
+      serverStatus: true,
+      user: true,
+      users: true,
+
+      // Protected queries
+      me: isAuthenticated,
+    },
+    Mutation: {
+      // Public mutations
+      createUser: true,
+
+      // Protected mutations
+      updateUser: isAuthenticated,
+      postLifeScore: isAuthenticated,
+      deleteLifeScore: isAuthenticated,
+    },
+  },
+  {
+    // Options
+    allowExternalErrors: true,
+    fallbackError: 'Not authorized to access this resource',
+  }
+);
