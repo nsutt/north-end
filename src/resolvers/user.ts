@@ -71,6 +71,13 @@ export const userResolvers = {
     },
   },
   User: {
+    // Serialize DateTime fields to ISO strings
+    createdAt: (parent: { createdAt: Date }) => {
+      return parent.createdAt.toISOString();
+    },
+    updatedAt: (parent: { updatedAt: Date }) => {
+      return parent.updatedAt.toISOString();
+    },
     // Resolve currentScore field
     currentScore: async (parent: any) => {
       const latestScore = await prisma.lifeScore.findFirst({

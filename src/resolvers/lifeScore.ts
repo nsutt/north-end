@@ -6,6 +6,9 @@ export const lifeScoreResolvers = {
     user: async (lifeScore: { userId: string }) => {
       return await getUserById(lifeScore.userId);
     },
+    createdAt: (lifeScore: { createdAt: Date }) => {
+      return lifeScore.createdAt.toISOString();
+    },
   },
   Mutation: {
     postLifeScore: async (
