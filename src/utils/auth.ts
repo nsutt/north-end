@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 
 // In production, this should be in environment variables
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
-const JWT_EXPIRES_IN = '7d'; // 7 days
+const JWT_EXPIRES_IN = '100y'; // 100 years (effectively forever)
 
 export interface TokenPayload {
   userId: string;
