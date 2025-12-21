@@ -69,8 +69,8 @@ async function startServer() {
         return { user: null };
       }
 
-      // Get user from storage
-      const user = getUserById(payload.userId);
+      // Get user from database
+      const user = await getUserById(payload.userId);
       if (!user) {
         return { user: null };
       }
