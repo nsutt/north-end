@@ -1,4 +1,4 @@
-import { rule, shield, and } from 'graphql-shield';
+import { rule, shield, and, allow } from 'graphql-shield';
 
 // Rule: User must be authenticated
 const isAuthenticated = rule({ cache: 'contextual' })(
@@ -27,17 +27,17 @@ export const permissions = shield(
   {
     Query: {
       // Public queries
-      hello: true,
-      serverStatus: true,
-      user: true,
-      users: true,
+      hello: allow,
+      serverStatus: allow,
+      user: allow,
+      users: allow,
 
       // Protected queries
       me: isAuthenticated,
     },
     Mutation: {
       // Public mutations
-      createUser: true,
+      createUser: allow,
 
       // Protected mutations
       updateUser: isAuthenticated,
