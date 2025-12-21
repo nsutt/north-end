@@ -22,6 +22,7 @@ export const userTypeDefs = `#graphql
   type Mutation {
     createUser(input: CreateUserInput): AuthPayload!
     updateUser(id: ID!, input: UpdateUserInput!): User!
+    deleteUser(id: ID!): Boolean!
   }
 
   input CreateUserInput {

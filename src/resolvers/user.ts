@@ -69,6 +69,23 @@ export const userResolvers = {
       });
       return user;
     },
+    deleteUser: async (_: any, { id }: { id: string }, context: any) => {
+      // Check if user is authenticated and trying to delete their own account
+      if (!context.user) {
+        throw new Error('You must be logged in to delete a user');
+      }
+
+      if (context.user.id !== id) {
+        throw new Error('You can only delete your own account');
+      }
+
+      // Delete the user (cascade will delete all related lifeScores)
+      await prisma.user.delete({
+        where: { id },
+      });
+
+      return true;
+    },
   },
   User: {
     // Serialize DateTime fields to ISO strings
