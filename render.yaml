@@ -6,10 +6,12 @@ services:
     env: node
     region: oregon
     plan: free
-    buildCommand: npm install --include=dev && npm run build
+    buildCommand: npm install --include=dev && npm run build && npm run db:push
     startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 4000
+      - key: DATABASE_URL
+        sync: false  # Will be set manually from Render PostgreSQL

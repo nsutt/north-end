@@ -1,12 +1,5 @@
 import { generateToken } from '../utils/auth';
-
-interface User {
-  id: string;
-  displayName?: string;
-  avatarUrl?: string;
-  createdAt: string;
-  updatedAt: string;
-}
+import { prisma } from '../lib/prisma';
 
 interface CreateUserInput {
   displayName?: string;
@@ -18,41 +11,42 @@ interface UpdateUserInput {
   avatarUrl?: string;
 }
 
-// In-memory storage (replace with database later)
-const users: Map<string, User> = new Map();
-let nextId = 1;
-
-// Export for use by other resolvers
-export function getUserById(id: string): User | null {
-  return users.get(id) || null;
+// Export for use by other resolvers (auth)
+export async function getUserById(id: string) {
+  return await prisma.user.findUnique({
+    where: { id },
+  });
 }
 
 export const userResolvers = {
   Query: {
-    user: (_: any, { id }: { id: string }) => {
-      return users.get(id) || null;
+    user: async (_: any, { id }: { id: string }) => {
+      return await prisma.user.findUnique({
+        where: { id },
+      });
     },
-    users: () => {
-      return Array.from(users.values());
+    users: async () => {
+      return await prisma.user.findMany({
+        orderBy: { createdAt: 'desc' },
+      });
     },
-    me: (_: any, __: any, context: any) => {
+    me: async (_: any, __: any, context: any) => {
       if (!context.user) {
         return null;
       }
-      return users.get(context.user.id) || null;
+      return await prisma.user.findUnique({
+        where: { id: context.user.id },
+      });
     },
   },
   Mutation: {
-    createUser: (_: any, { input }: { input?: CreateUserInput }) => {
-      const now = new Date().toISOString();
-      const user: User = {
-        id: String(nextId++),
-        displayName: input?.displayName,
-        avatarUrl: input?.avatarUrl,
-        createdAt: now,
-        updatedAt: now,
-      };
-      users.set(user.id, user);
+    createUser: async (_: any, { input }: { input?: CreateUserInput }) => {
+      const user = await prisma.user.create({
+        data: {
+          displayName: input?.displayName,
+          avatarUrl: input?.avatarUrl,
+        },
+      });
 
       // Generate JWT token
       const token = generateToken(user.id);
@@ -62,22 +56,35 @@ export const userResolvers = {
         token,
       };
     },
-    updateUser: (
+    updateUser: async (
       _: any,
       { id, input }: { id: string; input: UpdateUserInput }
     ) => {
-      const user = users.get(id);
-      if (!user) {
-        throw new Error(`User with id ${id} not found`);
-      }
-      const updatedUser: User = {
-        ...user,
-        displayName: input.displayName ?? user.displayName,
-        avatarUrl: input.avatarUrl ?? user.avatarUrl,
-        updatedAt: new Date().toISOString(),
-      };
-      users.set(id, updatedUser);
-      return updatedUser;
+      const user = await prisma.user.update({
+        where: { id },
+        data: {
+          displayName: input.displayName,
+          avatarUrl: input.avatarUrl,
+        },
+      });
+      return user;
+    },
+  },
+  User: {
+    // Resolve currentScore field
+    currentScore: async (parent: any) => {
+      const latestScore = await prisma.lifeScore.findFirst({
+        where: { userId: parent.id },
+        orderBy: { createdAt: 'desc' },
+      });
+      return latestScore;
+    },
+    // Resolve lifeScores field
+    lifeScores: async (parent: any) => {
+      return await prisma.lifeScore.findMany({
+        where: { userId: parent.id },
+        orderBy: { createdAt: 'desc' },
+      });
     },
   },
 };

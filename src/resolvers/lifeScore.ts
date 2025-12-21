@@ -1,40 +1,14 @@
-interface LifeScore {
-  id: string;
-  userId: string;
-  score: number;
-  createdAt: string;
-}
-
+import { prisma } from '../lib/prisma';
 import { getUserById } from './user';
-
-// In-memory storage (replace with database later)
-const lifeScores: Map<string, LifeScore> = new Map();
-let nextId = 1;
 
 export const lifeScoreResolvers = {
   LifeScore: {
-    user: (lifeScore: LifeScore) => {
-      return getUserById(lifeScore.userId);
-    },
-  },
-  User: {
-    lifeScores: (user: { id: string }) => {
-      // Get all life scores for this user
-      return Array.from(lifeScores.values()).filter(
-        (score) => score.userId === user.id
-      );
-    },
-    currentScore: (user: { id: string }) => {
-      // Get the most recent life score for this user
-      const userScores = Array.from(lifeScores.values())
-        .filter((score) => score.userId === user.id)
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-      return userScores[0] || null;
+    user: async (lifeScore: { userId: string }) => {
+      return await getUserById(lifeScore.userId);
     },
   },
   Mutation: {
-    postLifeScore: (
+    postLifeScore: async (
       _: any,
       { score }: { score: number },
       context: any
@@ -51,18 +25,19 @@ export const lifeScoreResolvers = {
         throw new Error('Score must be between 0 and 10');
       }
 
-      const lifeScore: LifeScore = {
-        id: String(nextId++),
-        userId,
-        score,
-        createdAt: new Date().toISOString(),
-      };
+      const lifeScore = await prisma.lifeScore.create({
+        data: {
+          userId,
+          score,
+        },
+      });
 
-      lifeScores.set(lifeScore.id, lifeScore);
       return lifeScore;
     },
-    deleteLifeScore: (_: any, { id }: { id: string }, context: any) => {
-      const lifeScore = lifeScores.get(id);
+    deleteLifeScore: async (_: any, { id }: { id: string }, context: any) => {
+      const lifeScore = await prisma.lifeScore.findUnique({
+        where: { id },
+      });
 
       if (!lifeScore) {
         throw new Error('Life score not found');
@@ -73,8 +48,11 @@ export const lifeScoreResolvers = {
         throw new Error('You can only delete your own scores');
       }
 
-      const deleted = lifeScores.delete(id);
-      return deleted;
+      await prisma.lifeScore.delete({
+        where: { id },
+      });
+
+      return true;
     },
   },
 };
