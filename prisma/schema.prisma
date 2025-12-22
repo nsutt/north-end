@@ -11,11 +11,16 @@ datasource db {
 
 model User {
   id          String      @id @default(uuid())
-  displayName String?
+  displayName String
   avatarUrl   String?
+  uniqueCode  String?     @unique
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   lifeScores  LifeScore[]
+
+  // User connections
+  sentConnections     UserConnection[] @relation("SentConnections")
+  receivedConnections UserConnection[] @relation("ReceivedConnections")
 
   @@map("users")
 }
@@ -29,4 +34,28 @@ model LifeScore {
 
   @@map("life_scores")
   @@index([userId, createdAt])
+}
+
+model UserConnection {
+  id         String           @id @default(uuid())
+  senderId   String
+  receiverId String
+  status     ConnectionStatus @default(PENDING)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  sender   User @relation("SentConnections", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("ReceivedConnections", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, receiverId])
+  @@index([senderId, status])
+  @@index([receiverId, status])
+  @@index([senderId, receiverId, status])
+  @@map("user_connections")
+}
+
+enum ConnectionStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
 }

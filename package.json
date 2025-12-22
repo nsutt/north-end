@@ -10,6 +10,7 @@
     "db:migrate": "prisma migrate deploy",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
+    "backfill:codes": "ts-node-dev scripts/backfill-unique-codes.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

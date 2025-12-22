@@ -1,8 +1,9 @@
 import { generateToken } from '../utils/auth';
 import { prisma } from '../lib/prisma';
+import { generateUniqueCodeSafe } from '../utils/codeGenerator';
 
 interface CreateUserInput {
-  displayName?: string;
+  displayName: string;
   avatarUrl?: string;
 }
 
@@ -34,17 +35,36 @@ export const userResolvers = {
       if (!context.user) {
         return null;
       }
-      return await prisma.user.findUnique({
+      const user = await prisma.user.findUnique({
         where: { id: context.user.id },
       });
+
+      // DEBUG: Log what we're returning
+      console.log('🔍 ME Query Debug:', {
+        userId: user?.id,
+        displayName: user?.displayName,
+        uniqueCode: user?.uniqueCode,
+        hasUniqueCode: !!user?.uniqueCode
+      });
+
+      return user;
     },
   },
   Mutation: {
-    createUser: async (_: any, { input }: { input?: CreateUserInput }) => {
+    createUser: async (_: any, { input }: { input: CreateUserInput }) => {
+      // Validate displayName is provided and not empty
+      if (!input.displayName?.trim()) {
+        throw new Error('Display name is required');
+      }
+
+      // Generate unique code for new user
+      const uniqueCode = await generateUniqueCodeSafe(prisma);
+
       const user = await prisma.user.create({
         data: {
-          displayName: input?.displayName,
+          displayName: input.displayName.trim(),
           avatarUrl: input?.avatarUrl,
+          uniqueCode,
         },
       });
 
@@ -76,6 +96,40 @@ export const userResolvers = {
       });
 
       return true;
+    },
+    loginWithCode: async (_: any, { code }: { code: string }) => {
+      // Find user by unique code (case-insensitive)
+      const user = await prisma.user.findUnique({
+        where: { uniqueCode: code.toLowerCase().trim() },
+      });
+
+      if (!user) {
+        throw new Error('Invalid code. Please check and try again.');
+      }
+
+      // Generate token for existing user
+      const token = generateToken(user.id);
+
+      return {
+        user,
+        token,
+      };
+    },
+    regenerateCode: async (_: any, __: any, context: any) => {
+      if (!context.user) {
+        throw new Error('You must be logged in to regenerate your code');
+      }
+
+      // Generate new unique code
+      const newCode = await generateUniqueCodeSafe(prisma);
+
+      // Update user's code
+      await prisma.user.update({
+        where: { id: context.user.id },
+        data: { uniqueCode: newCode },
+      });
+
+      return newCode;
     },
   },
   User: {

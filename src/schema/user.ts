@@ -1,8 +1,9 @@
 export const userTypeDefs = `#graphql
   type User {
     id: ID!
-    displayName: String
+    displayName: String!
     avatarUrl: String
+    uniqueCode: String
     createdAt: String!
     updatedAt: String!
     currentScore: LifeScore
@@ -23,10 +24,12 @@ export const userTypeDefs = `#graphql
     createUser(input: CreateUserInput): AuthPayload!
     updateUser(id: ID!, input: UpdateUserInput!): User!
     deleteUser(id: ID!): Boolean!
+    loginWithCode(code: String!): AuthPayload!
+    regenerateCode: String!
   }
 
   input CreateUserInput {
-    displayName: String
+    displayName: String!
     avatarUrl: String
   }
 

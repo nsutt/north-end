@@ -31,18 +31,31 @@ export const permissions = shield(
       serverStatus: allow,
       user: allow,
       users: allow,
+      connection: allow,
 
       // Protected queries
       me: isAuthenticated,
+      myConnections: isAuthenticated,
+      myPendingRequests: isAuthenticated,
+      connectionStatus: isAuthenticated,
     },
     Mutation: {
       // Public mutations
       createUser: allow,
+      loginWithCode: allow,
 
       // Protected mutations
       updateUser: isAuthenticated,
       postLifeScore: isAuthenticated,
       deleteLifeScore: isAuthenticated,
+      deleteUser: isAuthenticated,
+      regenerateCode: isAuthenticated,
+
+      // Connection mutations
+      sendConnectionRequest: isAuthenticated,
+      acceptConnectionRequest: isAuthenticated,
+      rejectConnectionRequest: isAuthenticated,
+      removeConnection: isAuthenticated,
     },
   },
   {

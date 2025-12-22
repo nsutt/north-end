@@ -7,6 +7,8 @@ import { userTypeDefs } from './schema/user';
 import { userResolvers, getUserById } from './resolvers/user';
 import { lifeScoreTypeDefs } from './schema/lifeScore';
 import { lifeScoreResolvers } from './resolvers/lifeScore';
+import { userConnectionTypeDefs } from './schema/userConnection';
+import { userConnectionResolvers } from './resolvers/userConnection';
 import { verifyToken, extractTokenFromHeader } from './utils/auth';
 import { permissions } from './permissions';
 
@@ -34,8 +36,8 @@ const baseResolvers = {
   },
 };
 
-const typeDefs = [baseTypeDefs, userTypeDefs, lifeScoreTypeDefs];
-const resolvers = [baseResolvers, userResolvers, lifeScoreResolvers];
+const typeDefs = [baseTypeDefs, userTypeDefs, lifeScoreTypeDefs, userConnectionTypeDefs];
+const resolvers = [baseResolvers, userResolvers, lifeScoreResolvers, userConnectionResolvers];
 
 async function startServer() {
   // Create executable schema
