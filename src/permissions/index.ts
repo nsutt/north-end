@@ -38,11 +38,20 @@ export const permissions = shield(
       myConnections: isAuthenticated,
       myPendingRequests: isAuthenticated,
       connectionStatus: isAuthenticated,
+
+      // Worm score queries
+      myHighScore: isAuthenticated,
+      levelHighScores: allow,
+
+      // Invite queries
+      invites: isAuthenticated,
+      invite: allow,
     },
     Mutation: {
       // Public mutations
       createUser: allow,
       loginWithCode: allow,
+      claimAccount: allow,
 
       // Protected mutations
       updateUser: isAuthenticated,
@@ -56,6 +65,13 @@ export const permissions = shield(
       acceptConnectionRequest: isAuthenticated,
       rejectConnectionRequest: isAuthenticated,
       removeConnection: isAuthenticated,
+
+      // Worm score mutations
+      submitWormScore: isAuthenticated,
+
+      // Invite mutations
+      createInvite: isAuthenticated,
+      deleteInvite: isAuthenticated,
     },
   },
   {

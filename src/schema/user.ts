@@ -26,6 +26,7 @@ export const userTypeDefs = `#graphql
     deleteUser(id: ID!): Boolean!
     loginWithCode(code: String!): AuthPayload!
     regenerateCode: String!
+    claimAccount(code: String!, displayName: String!): AuthPayload!
   }
 
   input CreateUserInput {

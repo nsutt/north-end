@@ -131,6 +131,62 @@ export const userResolvers = {
 
       return newCode;
     },
+    claimAccount: async (
+      _: any,
+      { code, displayName }: { code: string; displayName: string }
+    ) => {
+      // Validate displayName
+      if (!displayName?.trim()) {
+        throw new Error('Display name is required');
+      }
+
+      // Find invite by code
+      const invite = await prisma.invite.findUnique({
+        where: { code: code.toLowerCase().trim() },
+      });
+
+      if (!invite) {
+        throw new Error('Invalid invite code. Please check and try again.');
+      }
+
+      // Check if already used
+      if (invite.usedAt) {
+        throw new Error('This invite has already been used. Try logging in instead.');
+      }
+
+      // Check if expired
+      if (invite.expiresAt && invite.expiresAt < new Date()) {
+        throw new Error('This invite has expired.');
+      }
+
+      // Generate unique code for the new user
+      const uniqueCode = await generateUniqueCodeSafe(prisma);
+
+      // Create the user
+      const user = await prisma.user.create({
+        data: {
+          displayName: displayName.trim(),
+          uniqueCode,
+        },
+      });
+
+      // Mark invite as used
+      await prisma.invite.update({
+        where: { id: invite.id },
+        data: {
+          usedAt: new Date(),
+          usedById: user.id,
+        },
+      });
+
+      // Generate token
+      const token = generateToken(user.id);
+
+      return {
+        user,
+        token,
+      };
+    },
   },
   User: {
     // Serialize DateTime fields to ISO strings

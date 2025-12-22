@@ -17,6 +17,8 @@ model User {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   lifeScores  LifeScore[]
+  wormScores  WormScore[]
+  usedInvite  Invite?
 
   // User connections
   sentConnections     UserConnection[] @relation("SentConnections")
@@ -58,4 +60,30 @@ enum ConnectionStatus {
   PENDING
   ACCEPTED
   REJECTED
+}
+
+model WormScore {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  levelId   String
+  score     Int
+  createdAt DateTime @default(now())
+
+  @@map("worm_scores")
+  @@index([userId, levelId])
+  @@index([levelId, score(sort: Desc)])
+}
+
+model Invite {
+  id        String    @id @default(uuid())
+  code      String    @unique
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+  usedAt    DateTime?
+  usedById  String?   @unique
+  usedBy    User?     @relation(fields: [usedById], references: [id])
+
+  @@map("invites")
+  @@index([code])
 }

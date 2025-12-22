@@ -62,16 +62,28 @@ export function generateUniqueCode(): string {
 }
 
 // Check if code already exists in database
-export async function generateUniqueCodeSafe(prisma: any): Promise<string> {
+// type: 'user' checks uniqueCode in users table, 'invite' checks code in invites table
+export async function generateUniqueCodeSafe(
+  prisma: any,
+  type: 'user' | 'invite' = 'user'
+): Promise<string> {
   let code = generateUniqueCode();
   let attempts = 0;
   const maxAttempts = 100;
 
   // Keep generating until we find a unique one
   while (attempts < maxAttempts) {
-    const existing = await prisma.user.findUnique({
-      where: { uniqueCode: code },
-    });
+    let existing;
+
+    if (type === 'invite') {
+      existing = await prisma.invite.findUnique({
+        where: { code },
+      });
+    } else {
+      existing = await prisma.user.findUnique({
+        where: { uniqueCode: code },
+      });
+    }
 
     if (!existing) {
       return code;
