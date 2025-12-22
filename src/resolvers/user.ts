@@ -162,11 +162,12 @@ export const userResolvers = {
       // Generate unique code for the new user
       const uniqueCode = await generateUniqueCodeSafe(prisma);
 
-      // Create the user
+      // Create the user with authSyncedAt set (new users are already synced)
       const user = await prisma.user.create({
         data: {
           displayName: displayName.trim(),
           uniqueCode,
+          authSyncedAt: new Date(),
         },
       });
 
@@ -187,6 +188,18 @@ export const userResolvers = {
         token,
       };
     },
+    markAuthSynced: async (_: any, __: any, context: any) => {
+      if (!context.user) {
+        throw new Error('You must be logged in');
+      }
+
+      const user = await prisma.user.update({
+        where: { id: context.user.id },
+        data: { authSyncedAt: new Date() },
+      });
+
+      return user;
+    },
   },
   User: {
     // Serialize DateTime fields to ISO strings
@@ -195,6 +208,9 @@ export const userResolvers = {
     },
     updatedAt: (parent: { updatedAt: Date }) => {
       return parent.updatedAt.toISOString();
+    },
+    authSyncedAt: (parent: { authSyncedAt: Date | null }) => {
+      return parent.authSyncedAt?.toISOString() ?? null;
     },
     // Resolve currentScore field
     currentScore: async (parent: any) => {

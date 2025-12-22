@@ -72,6 +72,9 @@ export const permissions = shield(
       // Invite mutations
       createInvite: isAuthenticated,
       deleteInvite: isAuthenticated,
+
+      // Auth sync
+      markAuthSynced: isAuthenticated,
     },
   },
   {

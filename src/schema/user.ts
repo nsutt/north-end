@@ -4,6 +4,7 @@ export const userTypeDefs = `#graphql
     displayName: String!
     avatarUrl: String
     uniqueCode: String
+    authSyncedAt: String
     createdAt: String!
     updatedAt: String!
     currentScore: LifeScore
@@ -27,6 +28,7 @@ export const userTypeDefs = `#graphql
     loginWithCode(code: String!): AuthPayload!
     regenerateCode: String!
     claimAccount(code: String!, displayName: String!): AuthPayload!
+    markAuthSynced: User!
   }
 
   input CreateUserInput {

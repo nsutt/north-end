@@ -10,15 +10,16 @@ datasource db {
 }
 
 model User {
-  id          String      @id @default(uuid())
-  displayName String
-  avatarUrl   String?
-  uniqueCode  String?     @unique
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  lifeScores  LifeScore[]
-  wormScores  WormScore[]
-  usedInvite  Invite?
+  id           String      @id @default(uuid())
+  displayName  String
+  avatarUrl    String?
+  uniqueCode   String?     @unique
+  authSyncedAt DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  lifeScores   LifeScore[]
+  wormScores   WormScore[]
+  usedInvite   Invite?
 
   // User connections
   sentConnections     UserConnection[] @relation("SentConnections")
