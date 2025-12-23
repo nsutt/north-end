@@ -232,5 +232,46 @@ export const userResolvers = {
         orderBy: { createdAt: 'desc' },
       });
     },
+    // Resolve friendStatus field (relationship between viewing user and this user)
+    friendStatus: async (parent: { id: string }, _: any, context: any) => {
+      // If no authenticated user, return null
+      if (!context.user) {
+        return null;
+      }
+
+      // If viewing own profile, return null
+      if (context.user.id === parent.id) {
+        return null;
+      }
+
+      // Check for connection between current user and target user
+      const connection = await prisma.userConnection.findFirst({
+        where: {
+          OR: [
+            { senderId: context.user.id, receiverId: parent.id },
+            { senderId: parent.id, receiverId: context.user.id },
+          ],
+        },
+      });
+
+      if (!connection) {
+        return 'NONE';
+      }
+
+      if (connection.status === 'ACCEPTED') {
+        return 'FRIENDS';
+      }
+
+      if (connection.status === 'PENDING') {
+        // Check if current user sent or received the request
+        if (connection.senderId === context.user.id) {
+          return 'PENDING_SENT';
+        } else {
+          return 'PENDING_RECEIVED';
+        }
+      }
+
+      return 'NONE';
+    },
   },
 };

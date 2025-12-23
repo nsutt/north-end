@@ -32,11 +32,12 @@ model User {
 }
 
 model LifeScore {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  score     Float
-  createdAt DateTime @default(now())
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  score      Float
+  statusText String?
+  createdAt  DateTime @default(now())
 
   @@map("life_scores")
   @@index([userId, createdAt])

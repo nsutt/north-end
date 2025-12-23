@@ -4,6 +4,7 @@ export const lifeScoreTypeDefs = `#graphql
     userId: ID!
     user: User
     score: Float!
+    statusText: String
     createdAt: String!
   }
 
@@ -12,7 +13,7 @@ export const lifeScoreTypeDefs = `#graphql
   }
 
   extend type Mutation {
-    postLifeScore(score: Float!): LifeScore!
+    postLifeScore(score: Float!, statusText: String): LifeScore!
     deleteLifeScore(id: ID!): Boolean!
   }
 `;

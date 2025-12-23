@@ -1,4 +1,11 @@
 export const userTypeDefs = `#graphql
+  enum FriendStatus {
+    FRIENDS
+    PENDING_SENT
+    PENDING_RECEIVED
+    NONE
+  }
+
   type User {
     id: ID!
     displayName: String!
@@ -11,6 +18,7 @@ export const userTypeDefs = `#graphql
     currentScore: LifeScore
     usedInvite: Invite
     invites: [Invite!]!
+    friendStatus: FriendStatus
   }
 
   type AuthPayload {
