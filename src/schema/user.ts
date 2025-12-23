@@ -5,6 +5,7 @@ export const userTypeDefs = `#graphql
     avatarUrl: String
     uniqueCode: String
     authSyncedAt: String
+    features: [String!]!
     createdAt: String!
     updatedAt: String!
     currentScore: LifeScore

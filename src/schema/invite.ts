@@ -1,3 +1,4 @@
+// invite 
 export const inviteTypeDefs = `#graphql
   type Invite {
     id: ID!

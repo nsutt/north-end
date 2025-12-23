@@ -15,6 +15,7 @@ model User {
   avatarUrl    String?
   uniqueCode   String?     @unique
   authSyncedAt DateTime?
+  features     String[]    @default([])
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
   lifeScores   LifeScore[]

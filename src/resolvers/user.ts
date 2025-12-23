@@ -212,6 +212,10 @@ export const userResolvers = {
     authSyncedAt: (parent: { authSyncedAt: Date | null }) => {
       return parent.authSyncedAt?.toISOString() ?? null;
     },
+    // Ensure features is never null (for users created before this field existed)
+    features: (parent: { features: string[] | null }) => {
+      return parent.features ?? [];
+    },
     // Resolve currentScore field
     currentScore: async (parent: any) => {
       const latestScore = await prisma.lifeScore.findFirst({
