@@ -18,6 +18,11 @@ export const inviteResolvers = {
         where: { id: parent.usedById },
       });
     },
+    createdBy: async (parent: { createdById: string }) => {
+      return await prisma.user.findUnique({
+        where: { id: parent.createdById },
+      });
+    },
   },
   Query: {
     invites: async (_: any, __: any, context: any) => {
@@ -58,6 +63,7 @@ export const inviteResolvers = {
         data: {
           code,
           expiresAt,
+          createdById: context.user.id,
         },
       });
 

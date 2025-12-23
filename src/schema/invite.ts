@@ -7,6 +7,7 @@ export const inviteTypeDefs = `#graphql
     expiresAt: String
     usedAt: String
     usedBy: User
+    createdBy: User!
   }
 
   extend type Query {
