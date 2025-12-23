@@ -13,6 +13,8 @@ import { wormScoreTypeDefs } from './schema/wormScore';
 import { wormScoreResolvers } from './resolvers/wormScore';
 import { inviteTypeDefs } from './schema/invite';
 import { inviteResolvers } from './resolvers/invite';
+import { scoreCommentTypeDefs } from './schema/scoreComment';
+import { scoreCommentResolvers } from './resolvers/scoreComment';
 import { verifyToken, extractTokenFromHeader } from './utils/auth';
 import { permissions } from './permissions';
 
@@ -40,8 +42,8 @@ const baseResolvers = {
   },
 };
 
-const typeDefs = [baseTypeDefs, userTypeDefs, lifeScoreTypeDefs, userConnectionTypeDefs, wormScoreTypeDefs, inviteTypeDefs];
-const resolvers = [baseResolvers, userResolvers, lifeScoreResolvers, userConnectionResolvers, wormScoreResolvers, inviteResolvers];
+const typeDefs = [baseTypeDefs, userTypeDefs, lifeScoreTypeDefs, userConnectionTypeDefs, wormScoreTypeDefs, inviteTypeDefs, scoreCommentTypeDefs];
+const resolvers = [baseResolvers, userResolvers, lifeScoreResolvers, userConnectionResolvers, wormScoreResolvers, inviteResolvers, scoreCommentResolvers];
 
 async function startServer() {
   // Create executable schema

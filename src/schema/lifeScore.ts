@@ -12,6 +12,10 @@ export const lifeScoreTypeDefs = `#graphql
     lifeScores: [LifeScore!]!
   }
 
+  extend type Query {
+    lifeScore(id: ID!): LifeScore
+  }
+
   extend type Mutation {
     postLifeScore(score: Float!, statusText: String): LifeScore!
     deleteLifeScore(id: ID!): Boolean!

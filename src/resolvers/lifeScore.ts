@@ -2,6 +2,13 @@ import { prisma } from '../lib/prisma';
 import { getUserById } from './user';
 
 export const lifeScoreResolvers = {
+  Query: {
+    lifeScore: async (_: any, { id }: { id: string }) => {
+      return await prisma.lifeScore.findUnique({
+        where: { id },
+      });
+    },
+  },
   LifeScore: {
     user: async (lifeScore: { userId: string }) => {
       return await getUserById(lifeScore.userId);

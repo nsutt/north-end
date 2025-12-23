@@ -46,6 +46,12 @@ export const permissions = shield(
       // Invite queries
       invites: isAuthenticated,
       invite: allow,
+
+      // Life score queries
+      lifeScore: allow,
+
+      // Score comment queries
+      scoreComments: isAuthenticated,
     },
     Mutation: {
       // Public mutations
@@ -75,6 +81,10 @@ export const permissions = shield(
 
       // Auth sync
       markAuthSynced: isAuthenticated,
+
+      // Score comment mutations
+      addScoreComment: isAuthenticated,
+      deleteScoreComment: isAuthenticated,
     },
   },
   {

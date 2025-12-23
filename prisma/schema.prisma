@@ -28,16 +28,20 @@ model User {
   sentConnections     UserConnection[] @relation("SentConnections")
   receivedConnections UserConnection[] @relation("ReceivedConnections")
 
+  // Score comments
+  scoreComments ScoreComment[]
+
   @@map("users")
 }
 
 model LifeScore {
-  id         String   @id @default(uuid())
+  id         String         @id @default(uuid())
   userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   score      Float
   statusText String?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime       @default(now())
+  comments   ScoreComment[]
 
   @@map("life_scores")
   @@index([userId, createdAt])
@@ -92,4 +96,18 @@ model Invite {
   @@map("invites")
   @@index([code])
   @@index([createdById])
+}
+
+model ScoreComment {
+  id          String    @id @default(uuid())
+  lifeScoreId String
+  lifeScore   LifeScore @relation(fields: [lifeScoreId], references: [id], onDelete: Cascade)
+  authorId    String
+  author      User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content     String
+  createdAt   DateTime  @default(now())
+
+  @@map("score_comments")
+  @@index([lifeScoreId, createdAt])
+  @@index([authorId])
 }
