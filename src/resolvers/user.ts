@@ -149,11 +149,6 @@ export const userResolvers = {
         throw new Error('Invalid invite code. Please check and try again.');
       }
 
-      // Check if already used
-      if (invite.usedAt) {
-        throw new Error('This invite has already been used. Try logging in instead.');
-      }
-
       // Check if expired
       if (invite.expiresAt && invite.expiresAt < new Date()) {
         throw new Error('This invite has expired.');
@@ -162,21 +157,13 @@ export const userResolvers = {
       // Generate unique code for the new user
       const uniqueCode = await generateUniqueCodeSafe(prisma);
 
-      // Create the user with authSyncedAt set (new users are already synced)
+      // Create the user with authSyncedAt set and link to the invite
       const user = await prisma.user.create({
         data: {
           displayName: displayName.trim(),
           uniqueCode,
           authSyncedAt: new Date(),
-        },
-      });
-
-      // Mark invite as used
-      await prisma.invite.update({
-        where: { id: invite.id },
-        data: {
-          usedAt: new Date(),
-          usedById: user.id,
+          usedInviteId: invite.id,
         },
       });
 
@@ -228,6 +215,20 @@ export const userResolvers = {
     lifeScores: async (parent: any) => {
       return await prisma.lifeScore.findMany({
         where: { userId: parent.id },
+        orderBy: { createdAt: 'desc' },
+      });
+    },
+    // Resolve usedInvite field
+    usedInvite: async (parent: { usedInviteId: string | null }) => {
+      if (!parent.usedInviteId) return null;
+      return await prisma.invite.findUnique({
+        where: { id: parent.usedInviteId },
+      });
+    },
+    // Resolve invites field (invites created by this user)
+    invites: async (parent: { id: string }) => {
+      return await prisma.invite.findMany({
+        where: { createdById: parent.id },
         orderBy: { createdAt: 'desc' },
       });
     },

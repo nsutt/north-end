@@ -9,6 +9,8 @@ export const userTypeDefs = `#graphql
     createdAt: String!
     updatedAt: String!
     currentScore: LifeScore
+    usedInvite: Invite
+    invites: [Invite!]!
   }
 
   type AuthPayload {

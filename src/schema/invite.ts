@@ -1,13 +1,13 @@
-// invite 
+// invite
 export const inviteTypeDefs = `#graphql
   type Invite {
     id: ID!
     code: String!
     createdAt: String!
     expiresAt: String
-    usedAt: String
-    usedBy: User
     createdBy: User!
+    usedBy: [User!]!
+    useCount: Int!
   }
 
   extend type Query {
@@ -17,6 +17,7 @@ export const inviteTypeDefs = `#graphql
 
   extend type Mutation {
     createInvite(expiresInDays: Int): Invite!
+    expireInvite(id: ID!): Invite!
     deleteInvite(id: ID!): Boolean!
   }
 `;

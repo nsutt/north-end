@@ -20,7 +20,8 @@ model User {
   updatedAt    DateTime    @updatedAt
   lifeScores   LifeScore[]
   wormScores   WormScore[]
-  usedInvite   Invite?     @relation("UsedInvite")
+  usedInviteId String?
+  usedInvite   Invite?     @relation("UsedInvite", fields: [usedInviteId], references: [id])
   createdInvites Invite[]  @relation("CreatedInvites")
 
   // User connections
@@ -83,11 +84,9 @@ model Invite {
   code        String    @unique
   createdAt   DateTime  @default(now())
   expiresAt   DateTime?
-  usedAt      DateTime?
-  usedById    String?   @unique
-  usedBy      User?     @relation("UsedInvite", fields: [usedById], references: [id])
   createdById String
   createdBy   User      @relation("CreatedInvites", fields: [createdById], references: [id])
+  usedBy      User[]    @relation("UsedInvite")
 
   @@map("invites")
   @@index([code])

@@ -9,18 +9,19 @@ export const inviteResolvers = {
     expiresAt: (parent: { expiresAt: Date | null }) => {
       return parent.expiresAt?.toISOString() ?? null;
     },
-    usedAt: (parent: { usedAt: Date | null }) => {
-      return parent.usedAt?.toISOString() ?? null;
-    },
-    usedBy: async (parent: { usedById: string | null }) => {
-      if (!parent.usedById) return null;
-      return await prisma.user.findUnique({
-        where: { id: parent.usedById },
-      });
-    },
     createdBy: async (parent: { createdById: string }) => {
       return await prisma.user.findUnique({
         where: { id: parent.createdById },
+      });
+    },
+    usedBy: async (parent: { id: string }) => {
+      return await prisma.user.findMany({
+        where: { usedInviteId: parent.id },
+      });
+    },
+    useCount: async (parent: { id: string }) => {
+      return await prisma.user.count({
+        where: { usedInviteId: parent.id },
       });
     },
   },
@@ -68,6 +69,29 @@ export const inviteResolvers = {
       });
 
       return invite;
+    },
+    expireInvite: async (_: any, { id }: { id: string }, context: any) => {
+      if (!context.user) {
+        throw new Error('You must be logged in to expire invites');
+      }
+
+      // Only allow expiring your own invites
+      const invite = await prisma.invite.findUnique({
+        where: { id },
+      });
+
+      if (!invite) {
+        throw new Error('Invite not found');
+      }
+
+      if (invite.createdById !== context.user.id) {
+        throw new Error('You can only expire your own invites');
+      }
+
+      return await prisma.invite.update({
+        where: { id },
+        data: { expiresAt: new Date() },
+      });
     },
     deleteInvite: async (_: any, { id }: { id: string }, context: any) => {
       if (!context.user) {
