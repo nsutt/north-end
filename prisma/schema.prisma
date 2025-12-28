@@ -24,29 +24,36 @@ model User {
   usedInvite   Invite?     @relation("UsedInvite", fields: [usedInviteId], references: [id])
   createdInvites Invite[]  @relation("CreatedInvites")
 
-  // User connections
+  // Score comments
+  scoreComments ScoreComment[]
+
+  // User connections (deprecated - kept for data preservation)
   sentConnections     UserConnection[] @relation("SentConnections")
   receivedConnections UserConnection[] @relation("ReceivedConnections")
 
-  // Score comments
-  scoreComments ScoreComment[]
+  // Groups
+  createdGroups    Group[]           @relation("CreatedGroups")
+  groupMemberships GroupMembership[]
+  groupInvitesSent GroupMembership[] @relation("GroupInviter")
 
   @@map("users")
 }
 
 model LifeScore {
-  id         String         @id @default(uuid())
+  id         String           @id @default(uuid())
   userId     String
-  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   score      Float
   statusText String?
-  createdAt  DateTime       @default(now())
+  createdAt  DateTime         @default(now())
   comments   ScoreComment[]
+  groups     LifeScoreGroup[]
 
   @@map("life_scores")
   @@index([userId, createdAt])
 }
 
+// User connections (deprecated - kept for data preservation, not used in code)
 model UserConnection {
   id         String           @id @default(uuid())
   senderId   String
@@ -104,10 +111,86 @@ model ScoreComment {
   lifeScore   LifeScore @relation(fields: [lifeScoreId], references: [id], onDelete: Cascade)
   authorId    String
   author      User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  groupId     String?
+  group       Group?    @relation(fields: [groupId], references: [id], onDelete: Cascade)
   content     String
   createdAt   DateTime  @default(now())
 
   @@map("score_comments")
   @@index([lifeScoreId, createdAt])
+  @@index([lifeScoreId, groupId])
   @@index([authorId])
+}
+
+// Groups
+
+model Group {
+  id              String            @id @default(uuid())
+  name            String
+  createdById     String
+  createdBy       User              @relation("CreatedGroups", fields: [createdById], references: [id])
+  memberships     GroupMembership[]
+  lifeScoreGroups LifeScoreGroup[]
+  comments        ScoreComment[]
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@map("groups")
+  @@index([createdById])
+}
+
+model GroupMembership {
+  id          String           @id @default(uuid())
+  groupId     String
+  group       Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        GroupRole        @default(MEMBER)
+  status      MembershipStatus @default(PENDING)
+  invitedById String?
+  invitedBy   User?            @relation("GroupInviter", fields: [invitedById], references: [id])
+  createdAt   DateTime         @default(now())
+  joinedAt    DateTime?
+
+  @@unique([groupId, userId])
+  @@map("group_memberships")
+  @@index([groupId])
+  @@index([userId])
+  @@index([userId, status])
+}
+
+enum GroupRole {
+  OWNER
+  MEMBER
+}
+
+enum MembershipStatus {
+  PENDING
+  ACCEPTED
+}
+
+model LifeScoreGroup {
+  id          String    @id @default(uuid())
+  lifeScoreId String
+  lifeScore   LifeScore @relation(fields: [lifeScoreId], references: [id], onDelete: Cascade)
+  groupId     String
+  group       Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([lifeScoreId, groupId])
+  @@map("life_score_groups")
+  @@index([lifeScoreId])
+  @@index([groupId])
+}
+
+// Tracks when a user last viewed comments for a score in a group
+model ScoreCommentRead {
+  id          String    @id @default(uuid())
+  userId      String
+  lifeScoreId String
+  groupId     String
+  lastReadAt  DateTime  @default(now())
+
+  @@unique([userId, lifeScoreId, groupId])
+  @@map("score_comment_reads")
+  @@index([userId, groupId])
 }

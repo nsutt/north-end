@@ -5,21 +5,23 @@ export const scoreCommentTypeDefs = `#graphql
     lifeScore: LifeScore!
     authorId: ID!
     author: User!
+    groupId: ID
+    group: Group
     content: String!
     createdAt: String!
     isOwnerComment: Boolean!
   }
 
   extend type LifeScore {
-    comments: [ScoreComment!]!
+    comments(groupId: ID): [ScoreComment!]!
   }
 
   extend type Query {
-    scoreComments(lifeScoreId: ID!): [ScoreComment!]!
+    scoreComments(lifeScoreId: ID!, groupId: ID!): [ScoreComment!]!
   }
 
   extend type Mutation {
-    addScoreComment(lifeScoreId: ID!, content: String!): ScoreComment!
+    addScoreComment(lifeScoreId: ID!, groupId: ID!, content: String!): ScoreComment!
     deleteScoreComment(commentId: ID!): Boolean!
   }
 `;

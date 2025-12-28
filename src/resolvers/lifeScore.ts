@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma';
 import { getUserById } from './user';
+import { MembershipStatus } from '@prisma/client';
 
 export const lifeScoreResolvers = {
   Query: {
@@ -7,6 +8,39 @@ export const lifeScoreResolvers = {
       return await prisma.lifeScore.findUnique({
         where: { id },
       });
+    },
+    groupScores: async (
+      _: any,
+      { groupId }: { groupId: string },
+      context: any
+    ) => {
+      if (!context.user) {
+        throw new Error('You must be logged in to view group scores');
+      }
+
+      // Verify user is a member of this group
+      const membership = await prisma.groupMembership.findUnique({
+        where: {
+          groupId_userId: { groupId, userId: context.user.id },
+        },
+      });
+
+      if (!membership || membership.status !== MembershipStatus.ACCEPTED) {
+        throw new Error('You must be a member of this group to view scores');
+      }
+
+      // Get all scores posted to this group
+      const lifeScoreGroups = await prisma.lifeScoreGroup.findMany({
+        where: { groupId },
+        include: {
+          lifeScore: true,
+        },
+        orderBy: {
+          lifeScore: { createdAt: 'desc' },
+        },
+      });
+
+      return lifeScoreGroups.map((lsg) => lsg.lifeScore);
     },
   },
   LifeScore: {
@@ -16,9 +50,69 @@ export const lifeScoreResolvers = {
     createdAt: (lifeScore: { createdAt: Date }) => {
       return lifeScore.createdAt.toISOString();
     },
-    // Only show statusText to the owner or their friends
+    groups: async (lifeScore: { id: string }) => {
+      const lifeScoreGroups = await prisma.lifeScoreGroup.findMany({
+        where: { lifeScoreId: lifeScore.id },
+        include: { group: true },
+      });
+      return lifeScoreGroups.map((lsg) => lsg.group);
+    },
+    commentCount: async (
+      lifeScore: { id: string },
+      { groupId }: { groupId: string }
+    ) => {
+      return await prisma.scoreComment.count({
+        where: {
+          lifeScoreId: lifeScore.id,
+          groupId,
+        },
+      });
+    },
+    unreadCommentCount: async (
+      lifeScore: { id: string },
+      { groupId }: { groupId: string },
+      context: any
+    ) => {
+      if (!context.user) return 0;
+
+      // Get user's last read timestamp for this score in this group
+      const readRecord = await prisma.scoreCommentRead.findUnique({
+        where: {
+          userId_lifeScoreId_groupId: {
+            userId: context.user.id,
+            lifeScoreId: lifeScore.id,
+            groupId,
+          },
+        },
+      });
+
+      // Count comments newer than last read (excluding user's own comments)
+      return await prisma.scoreComment.count({
+        where: {
+          lifeScoreId: lifeScore.id,
+          groupId,
+          authorId: { not: context.user.id },
+          ...(readRecord ? { createdAt: { gt: readRecord.lastReadAt } } : {}),
+        },
+      });
+    },
+    latestComment: async (
+      lifeScore: { id: string },
+      { groupId }: { groupId: string }
+    ) => {
+      return await prisma.scoreComment.findFirst({
+        where: {
+          lifeScoreId: lifeScore.id,
+          groupId,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+    },
+    // Only show statusText to the owner or group members
     statusText: async (
-      lifeScore: { userId: string; statusText: string | null },
+      lifeScore: { id: string; userId: string; statusText: string | null },
       _: any,
       context: any
     ) => {
@@ -30,27 +124,30 @@ export const lifeScoreResolvers = {
         return lifeScore.statusText;
       }
 
-      // Check if viewer is friends with the score owner
-      const connection = await prisma.userConnection.findFirst({
+      // Check if viewer shares a group with the score owner through this score
+      const sharedGroup = await prisma.lifeScoreGroup.findFirst({
         where: {
-          status: 'ACCEPTED',
-          OR: [
-            { senderId: context.user.id, receiverId: lifeScore.userId },
-            { senderId: lifeScore.userId, receiverId: context.user.id },
-          ],
+          lifeScoreId: lifeScore.id,
+          group: {
+            memberships: {
+              some: {
+                userId: context.user.id,
+                status: MembershipStatus.ACCEPTED,
+              },
+            },
+          },
         },
       });
 
-      return connection ? lifeScore.statusText : null;
+      return sharedGroup ? lifeScore.statusText : null;
     },
   },
   Mutation: {
     postLifeScore: async (
       _: any,
-      { score, statusText }: { score: number; statusText?: string },
+      { score, statusText, groupIds }: { score: number; statusText?: string; groupIds?: string[] },
       context: any
     ) => {
-      // Double-check authentication (GraphQL Shield should handle this)
       if (!context.user) {
         throw new Error('You must be logged in to post a score');
       }
@@ -62,12 +159,42 @@ export const lifeScoreResolvers = {
         throw new Error('Score must be between 0 and 10');
       }
 
-      const lifeScore = await prisma.lifeScore.create({
-        data: {
-          userId,
-          score,
-          statusText: statusText?.trim() || null,
-        },
+      // If groupIds provided, verify user is a member of all groups
+      if (groupIds && groupIds.length > 0) {
+        const memberships = await prisma.groupMembership.findMany({
+          where: {
+            userId,
+            groupId: { in: groupIds },
+            status: MembershipStatus.ACCEPTED,
+          },
+        });
+
+        if (memberships.length !== groupIds.length) {
+          throw new Error('You must be a member of all selected groups');
+        }
+      }
+
+      // Create score and group associations in a transaction
+      const lifeScore = await prisma.$transaction(async (tx) => {
+        const newScore = await tx.lifeScore.create({
+          data: {
+            userId,
+            score,
+            statusText: statusText?.trim() || null,
+          },
+        });
+
+        // Create group associations if groupIds provided
+        if (groupIds && groupIds.length > 0) {
+          await tx.lifeScoreGroup.createMany({
+            data: groupIds.map((groupId) => ({
+              lifeScoreId: newScore.id,
+              groupId,
+            })),
+          });
+        }
+
+        return newScore;
       });
 
       return lifeScore;

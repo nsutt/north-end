@@ -31,13 +31,10 @@ export const permissions = shield(
       serverStatus: allow,
       user: allow,
       users: allow,
-      connection: allow,
+      allUsers: isAuthenticated,
 
       // Protected queries
       me: isAuthenticated,
-      myConnections: isAuthenticated,
-      myPendingRequests: isAuthenticated,
-      connectionStatus: isAuthenticated,
 
       // Worm score queries
       myHighScore: isAuthenticated,
@@ -49,9 +46,15 @@ export const permissions = shield(
 
       // Life score queries
       lifeScore: allow,
+      groupScores: isAuthenticated,
 
       // Score comment queries
       scoreComments: isAuthenticated,
+
+      // Group queries
+      group: isAuthenticated,
+      myGroups: isAuthenticated,
+      myPendingGroupInvites: isAuthenticated,
     },
     Mutation: {
       // Public mutations
@@ -66,12 +69,6 @@ export const permissions = shield(
       deleteUser: isAuthenticated,
       regenerateCode: isAuthenticated,
 
-      // Connection mutations
-      sendConnectionRequest: isAuthenticated,
-      acceptConnectionRequest: isAuthenticated,
-      rejectConnectionRequest: isAuthenticated,
-      removeConnection: isAuthenticated,
-
       // Worm score mutations
       submitWormScore: isAuthenticated,
 
@@ -85,6 +82,16 @@ export const permissions = shield(
       // Score comment mutations
       addScoreComment: isAuthenticated,
       deleteScoreComment: isAuthenticated,
+
+      // Group mutations
+      createGroup: isAuthenticated,
+      updateGroup: isAuthenticated,
+      deleteGroup: isAuthenticated,
+      inviteToGroup: isAuthenticated,
+      acceptGroupInvite: isAuthenticated,
+      declineGroupInvite: isAuthenticated,
+      leaveGroup: isAuthenticated,
+      removeFromGroup: isAuthenticated,
     },
   },
   {

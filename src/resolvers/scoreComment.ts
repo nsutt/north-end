@@ -1,18 +1,25 @@
 import { prisma } from '../lib/prisma';
 import { getUserById } from './user';
+import { MembershipStatus } from '@prisma/client';
 
-// Helper: Check if two users are friends (accepted connection)
-async function areFriends(userId1: string, userId2: string): Promise<boolean> {
-  const connection = await prisma.userConnection.findFirst({
+// Helper: Check if user is a member of a group
+async function isGroupMember(userId: string, groupId: string): Promise<boolean> {
+  const membership = await prisma.groupMembership.findUnique({
     where: {
-      status: 'ACCEPTED',
-      OR: [
-        { senderId: userId1, receiverId: userId2 },
-        { senderId: userId2, receiverId: userId1 },
-      ],
+      groupId_userId: { groupId, userId },
     },
   });
-  return !!connection;
+  return membership?.status === MembershipStatus.ACCEPTED;
+}
+
+// Helper: Check if score was posted to a group
+async function isScoreInGroup(lifeScoreId: string, groupId: string): Promise<boolean> {
+  const lifeScoreGroup = await prisma.lifeScoreGroup.findUnique({
+    where: {
+      lifeScoreId_groupId: { lifeScoreId, groupId },
+    },
+  });
+  return !!lifeScoreGroup;
 }
 
 // Helper: Get LifeScore with owner info
@@ -33,6 +40,12 @@ export const scoreCommentResolvers = {
         where: { id: parent.lifeScoreId },
       });
     },
+    group: async (parent: { groupId: string | null }) => {
+      if (!parent.groupId) return null;
+      return await prisma.group.findUnique({
+        where: { id: parent.groupId },
+      });
+    },
     createdAt: (parent: { createdAt: Date }) => {
       return parent.createdAt.toISOString();
     },
@@ -47,9 +60,16 @@ export const scoreCommentResolvers = {
   },
 
   LifeScore: {
-    comments: async (parent: { id: string }) => {
+    comments: async (
+      parent: { id: string },
+      { groupId }: { groupId?: string }
+    ) => {
+      // If groupId provided, filter by it; otherwise return all comments
       return await prisma.scoreComment.findMany({
-        where: { lifeScoreId: parent.id },
+        where: {
+          lifeScoreId: parent.id,
+          ...(groupId ? { groupId } : {}),
+        },
         orderBy: { createdAt: 'asc' },
       });
     },
@@ -58,7 +78,7 @@ export const scoreCommentResolvers = {
   Query: {
     scoreComments: async (
       _: any,
-      { lifeScoreId }: { lifeScoreId: string },
+      { lifeScoreId, groupId }: { lifeScoreId: string; groupId: string },
       context: any
     ) => {
       if (!context.user) {
@@ -70,16 +90,24 @@ export const scoreCommentResolvers = {
         throw new Error('Life score not found');
       }
 
-      // User can see comments if they own the score OR are friends with owner
+      // Check if user is owner of the score
       const isOwner = lifeScore.userId === context.user.id;
-      const isFriend = await areFriends(context.user.id, lifeScore.userId);
 
-      if (!isOwner && !isFriend) {
-        throw new Error('You must be friends with the score owner to view comments');
+      // Check if user is a member of the specified group
+      const isMember = await isGroupMember(context.user.id, groupId);
+
+      if (!isOwner && !isMember) {
+        throw new Error('You must be a member of this group to view comments');
+      }
+
+      // Check if the score was posted to this group
+      const scoreInGroup = await isScoreInGroup(lifeScoreId, groupId);
+      if (!scoreInGroup) {
+        throw new Error('This score was not posted to this group');
       }
 
       return await prisma.scoreComment.findMany({
-        where: { lifeScoreId },
+        where: { lifeScoreId, groupId },
         orderBy: { createdAt: 'asc' },
       });
     },
@@ -88,7 +116,7 @@ export const scoreCommentResolvers = {
   Mutation: {
     addScoreComment: async (
       _: any,
-      { lifeScoreId, content }: { lifeScoreId: string; content: string },
+      { lifeScoreId, groupId, content }: { lifeScoreId: string; groupId: string; content: string },
       context: any
     ) => {
       if (!context.user) {
@@ -100,12 +128,20 @@ export const scoreCommentResolvers = {
         throw new Error('Life score not found');
       }
 
-      // Only the score owner OR their friends can comment
+      // Check if user is owner of the score
       const isOwner = lifeScore.userId === context.user.id;
-      const isFriend = await areFriends(context.user.id, lifeScore.userId);
 
-      if (!isOwner && !isFriend) {
-        throw new Error('You must be friends with the score owner to comment');
+      // Check if user is a member of the specified group
+      const isMember = await isGroupMember(context.user.id, groupId);
+
+      if (!isOwner && !isMember) {
+        throw new Error('You must be a member of this group to comment');
+      }
+
+      // Check if the score was posted to this group
+      const scoreInGroup = await isScoreInGroup(lifeScoreId, groupId);
+      if (!scoreInGroup) {
+        throw new Error('This score was not posted to this group');
       }
 
       // Validate content
@@ -120,6 +156,7 @@ export const scoreCommentResolvers = {
       return await prisma.scoreComment.create({
         data: {
           lifeScoreId,
+          groupId,
           authorId: context.user.id,
           content: trimmedContent,
         },

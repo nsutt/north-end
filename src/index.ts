@@ -7,14 +7,14 @@ import { userTypeDefs } from './schema/user';
 import { userResolvers, getUserById } from './resolvers/user';
 import { lifeScoreTypeDefs } from './schema/lifeScore';
 import { lifeScoreResolvers } from './resolvers/lifeScore';
-import { userConnectionTypeDefs } from './schema/userConnection';
-import { userConnectionResolvers } from './resolvers/userConnection';
 import { wormScoreTypeDefs } from './schema/wormScore';
 import { wormScoreResolvers } from './resolvers/wormScore';
 import { inviteTypeDefs } from './schema/invite';
 import { inviteResolvers } from './resolvers/invite';
 import { scoreCommentTypeDefs } from './schema/scoreComment';
 import { scoreCommentResolvers } from './resolvers/scoreComment';
+import { groupTypeDefs } from './schema/group';
+import { groupResolvers } from './resolvers/group';
 import { verifyToken, extractTokenFromHeader } from './utils/auth';
 import { permissions } from './permissions';
 
@@ -42,8 +42,8 @@ const baseResolvers = {
   },
 };
 
-const typeDefs = [baseTypeDefs, userTypeDefs, lifeScoreTypeDefs, userConnectionTypeDefs, wormScoreTypeDefs, inviteTypeDefs, scoreCommentTypeDefs];
-const resolvers = [baseResolvers, userResolvers, lifeScoreResolvers, userConnectionResolvers, wormScoreResolvers, inviteResolvers, scoreCommentResolvers];
+const typeDefs = [baseTypeDefs, userTypeDefs, lifeScoreTypeDefs, wormScoreTypeDefs, inviteTypeDefs, scoreCommentTypeDefs, groupTypeDefs];
+const resolvers = [baseResolvers, userResolvers, lifeScoreResolvers, wormScoreResolvers, inviteResolvers, scoreCommentResolvers, groupResolvers];
 
 async function startServer() {
   // Create executable schema

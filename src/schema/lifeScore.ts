@@ -6,6 +6,10 @@ export const lifeScoreTypeDefs = `#graphql
     score: Float!
     statusText: String
     createdAt: String!
+    groups: [Group!]!
+    commentCount(groupId: ID!): Int!
+    unreadCommentCount(groupId: ID!): Int!
+    latestComment(groupId: ID!): ScoreComment
   }
 
   extend type User {
@@ -14,10 +18,11 @@ export const lifeScoreTypeDefs = `#graphql
 
   extend type Query {
     lifeScore(id: ID!): LifeScore
+    groupScores(groupId: ID!): [LifeScore!]!
   }
 
   extend type Mutation {
-    postLifeScore(score: Float!, statusText: String): LifeScore!
+    postLifeScore(score: Float!, statusText: String, groupIds: [ID!]): LifeScore!
     deleteLifeScore(id: ID!): Boolean!
   }
 `;
