@@ -62,10 +62,10 @@ export function generateUniqueCode(): string {
 }
 
 // Check if code already exists in database
-// type: 'user' checks uniqueCode in users table, 'invite' checks code in invites table
+// type: 'user' checks uniqueCode in users table, 'invite' checks code in invites table, 'group' checks inviteCode in groups table
 export async function generateUniqueCodeSafe(
   prisma: any,
-  type: 'user' | 'invite' = 'user'
+  type: 'user' | 'invite' | 'group' = 'user'
 ): Promise<string> {
   let code = generateUniqueCode();
   let attempts = 0;
@@ -78,6 +78,10 @@ export async function generateUniqueCodeSafe(
     if (type === 'invite') {
       existing = await prisma.invite.findUnique({
         where: { code },
+      });
+    } else if (type === 'group') {
+      existing = await prisma.group.findUnique({
+        where: { inviteCode: code },
       });
     } else {
       existing = await prisma.user.findUnique({

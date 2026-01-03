@@ -1,6 +1,8 @@
 import { prisma } from '../lib/prisma';
 import { getUserById } from './user';
 import { GroupRole, MembershipStatus } from '@prisma/client';
+import { generateToken } from '../utils/auth';
+import { generateUniqueCodeSafe } from '../utils/codeGenerator';
 
 export const groupResolvers = {
   Query: {
@@ -37,6 +39,31 @@ export const groupResolvers = {
         },
         orderBy: { createdAt: 'desc' },
       });
+    },
+    groupByInviteCode: async (_: any, { code }: { code: string }) => {
+      // Public query - no auth required
+      const group = await prisma.group.findUnique({
+        where: { inviteCode: code.toLowerCase().trim() },
+        include: {
+          _count: {
+            select: {
+              memberships: {
+                where: { status: MembershipStatus.ACCEPTED },
+              },
+            },
+          },
+        },
+      });
+
+      if (!group) {
+        return null;
+      }
+
+      return {
+        id: group.id,
+        name: group.name,
+        memberCount: group._count.memberships,
+      };
     },
   },
 
@@ -356,6 +383,143 @@ export const groupResolvers = {
       });
 
       return true;
+    },
+
+    generateGroupInviteCode: async (
+      _: any,
+      { groupId }: { groupId: string },
+      context: any
+    ) => {
+      if (!context.user) {
+        throw new Error('You must be logged in');
+      }
+
+      const group = await prisma.group.findUnique({
+        where: { id: groupId },
+      });
+
+      if (!group) {
+        throw new Error('Group not found');
+      }
+
+      // Only owner can generate invite code
+      if (group.createdById !== context.user.id) {
+        throw new Error('Only the group owner can generate an invite link');
+      }
+
+      // Generate a new unique invite code
+      const inviteCode = await generateUniqueCodeSafe(prisma, 'group');
+
+      return await prisma.group.update({
+        where: { id: groupId },
+        data: { inviteCode },
+      });
+    },
+
+    joinGroupByCode: async (
+      _: any,
+      { code }: { code: string },
+      context: any
+    ) => {
+      if (!context.user) {
+        throw new Error('You must be logged in');
+      }
+
+      const group = await prisma.group.findUnique({
+        where: { inviteCode: code.toLowerCase().trim() },
+      });
+
+      if (!group) {
+        throw new Error('Invalid invite code');
+      }
+
+      // Check if already a member
+      const existingMembership = await prisma.groupMembership.findUnique({
+        where: {
+          groupId_userId: { groupId: group.id, userId: context.user.id },
+        },
+      });
+
+      if (existingMembership) {
+        if (existingMembership.status === MembershipStatus.ACCEPTED) {
+          throw new Error('You are already a member of this group');
+        }
+        // If pending, accept the invite
+        return await prisma.groupMembership.update({
+          where: { id: existingMembership.id },
+          data: {
+            status: MembershipStatus.ACCEPTED,
+            joinedAt: new Date(),
+          },
+        });
+      }
+
+      // Create new membership with ACCEPTED status (direct join via code)
+      return await prisma.groupMembership.create({
+        data: {
+          groupId: group.id,
+          userId: context.user.id,
+          role: GroupRole.MEMBER,
+          status: MembershipStatus.ACCEPTED,
+          joinedAt: new Date(),
+        },
+      });
+    },
+
+    createAccountAndJoinGroup: async (
+      _: any,
+      { code, displayName }: { code: string; displayName: string }
+    ) => {
+      // Validate displayName
+      if (!displayName?.trim()) {
+        throw new Error('Display name is required');
+      }
+
+      // Find group by invite code
+      const group = await prisma.group.findUnique({
+        where: { inviteCode: code.toLowerCase().trim() },
+      });
+
+      if (!group) {
+        throw new Error('Invalid invite code');
+      }
+
+      // Generate unique code for the new user
+      const uniqueCode = await generateUniqueCodeSafe(prisma, 'user');
+
+      // Create user and membership in a transaction
+      const result = await prisma.$transaction(async (tx) => {
+        // Create the user
+        const user = await tx.user.create({
+          data: {
+            displayName: displayName.trim(),
+            uniqueCode,
+            authSyncedAt: new Date(),
+          },
+        });
+
+        // Create group membership
+        const membership = await tx.groupMembership.create({
+          data: {
+            groupId: group.id,
+            userId: user.id,
+            role: GroupRole.MEMBER,
+            status: MembershipStatus.ACCEPTED,
+            joinedAt: new Date(),
+          },
+        });
+
+        return { user, membership };
+      });
+
+      // Generate token for the new user
+      const token = generateToken(result.user.id);
+
+      return {
+        token,
+        user: result.user,
+        membership: result.membership,
+      };
     },
   },
 

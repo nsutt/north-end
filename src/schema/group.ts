@@ -12,6 +12,7 @@ export const groupTypeDefs = `#graphql
   type Group {
     id: ID!
     name: String!
+    inviteCode: String
     createdById: ID!
     createdBy: User!
     members: [GroupMembership!]!
@@ -22,6 +23,13 @@ export const groupTypeDefs = `#graphql
     recentActivity: GroupRecentActivity
     createdAt: String!
     updatedAt: String!
+  }
+
+  # Public group info for invite page (no auth required)
+  type GroupPublicInfo {
+    id: ID!
+    name: String!
+    memberCount: Int!
   }
 
   type GroupRecentActivity {
@@ -52,6 +60,13 @@ export const groupTypeDefs = `#graphql
     group(id: ID!): Group
     myGroups: [Group!]!
     myPendingGroupInvites: [GroupMembership!]!
+    groupByInviteCode(code: String!): GroupPublicInfo
+  }
+
+  type JoinGroupResult {
+    token: String!
+    user: User!
+    membership: GroupMembership!
   }
 
   extend type Mutation {
@@ -64,5 +79,8 @@ export const groupTypeDefs = `#graphql
     leaveGroup(groupId: ID!): Boolean!
     removeFromGroup(groupId: ID!, userId: ID!): Boolean!
     markCommentsRead(lifeScoreId: ID!, groupId: ID!): Boolean!
+    generateGroupInviteCode(groupId: ID!): Group!
+    joinGroupByCode(code: String!): GroupMembership!
+    createAccountAndJoinGroup(code: String!, displayName: String!): JoinGroupResult!
   }
 `;

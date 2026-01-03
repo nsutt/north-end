@@ -127,6 +127,7 @@ model ScoreComment {
 model Group {
   id              String            @id @default(uuid())
   name            String
+  inviteCode      String?           @unique
   createdById     String
   createdBy       User              @relation("CreatedGroups", fields: [createdById], references: [id])
   memberships     GroupMembership[]
@@ -137,6 +138,7 @@ model Group {
 
   @@map("groups")
   @@index([createdById])
+  @@index([inviteCode])
 }
 
 model GroupMembership {
