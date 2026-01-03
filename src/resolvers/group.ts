@@ -402,9 +402,15 @@ export const groupResolvers = {
         throw new Error('Group not found');
       }
 
-      // Only owner can generate invite code
-      if (group.createdById !== context.user.id) {
-        throw new Error('Only the group owner can generate an invite link');
+      // Check if user is a member of the group
+      const membership = await prisma.groupMembership.findUnique({
+        where: {
+          groupId_userId: { groupId, userId: context.user.id },
+        },
+      });
+
+      if (!membership || membership.status !== MembershipStatus.ACCEPTED) {
+        throw new Error('You must be a member of the group to generate an invite link');
       }
 
       // Generate a new unique invite code
@@ -468,11 +474,27 @@ export const groupResolvers = {
 
     createAccountAndJoinGroup: async (
       _: any,
-      { code, displayName }: { code: string; displayName: string }
+      { code, displayName, email }: { code: string; displayName: string; email: string }
     ) => {
       // Validate displayName
       if (!displayName?.trim()) {
         throw new Error('Display name is required');
+      }
+
+      // Validate email
+      if (!email?.trim()) {
+        throw new Error('Email is required');
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+
+      // Check if email already exists
+      const existingUser = await prisma.user.findUnique({
+        where: { email: normalizedEmail },
+      });
+
+      if (existingUser) {
+        throw new Error('An account with this email already exists');
       }
 
       // Find group by invite code
@@ -492,6 +514,7 @@ export const groupResolvers = {
         // Create the user
         const user = await tx.user.create({
           data: {
+            email: normalizedEmail,
             displayName: displayName.trim(),
             uniqueCode,
             authSyncedAt: new Date(),

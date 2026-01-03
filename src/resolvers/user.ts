@@ -146,11 +146,27 @@ export const userResolvers = {
     },
     claimAccount: async (
       _: any,
-      { code, displayName }: { code: string; displayName: string }
+      { code, displayName, email }: { code: string; displayName: string; email: string }
     ) => {
       // Validate displayName
       if (!displayName?.trim()) {
         throw new Error('Display name is required');
+      }
+
+      // Validate email
+      if (!email?.trim()) {
+        throw new Error('Email is required');
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+
+      // Check if email already exists
+      const existingUser = await prisma.user.findUnique({
+        where: { email: normalizedEmail },
+      });
+
+      if (existingUser) {
+        throw new Error('An account with this email already exists');
       }
 
       // Find invite by code
@@ -173,6 +189,7 @@ export const userResolvers = {
       // Create the user with authSyncedAt set and link to the invite
       const user = await prisma.user.create({
         data: {
+          email: normalizedEmail,
           displayName: displayName.trim(),
           uniqueCode,
           authSyncedAt: new Date(),

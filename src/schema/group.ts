@@ -81,6 +81,6 @@ export const groupTypeDefs = `#graphql
     markCommentsRead(lifeScoreId: ID!, groupId: ID!): Boolean!
     generateGroupInviteCode(groupId: ID!): Group!
     joinGroupByCode(code: String!): GroupMembership!
-    createAccountAndJoinGroup(code: String!, displayName: String!): JoinGroupResult!
+    createAccountAndJoinGroup(code: String!, displayName: String!, email: String!): JoinGroupResult!
   }
 `;

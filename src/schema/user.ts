@@ -1,6 +1,7 @@
 export const userTypeDefs = `#graphql
   type User {
     id: ID!
+    email: String
     displayName: String!
     avatarUrl: String
     uniqueCode: String
@@ -31,7 +32,7 @@ export const userTypeDefs = `#graphql
     deleteUser(id: ID!): Boolean!
     loginWithCode(code: String!): AuthPayload!
     regenerateCode: String!
-    claimAccount(code: String!, displayName: String!): AuthPayload!
+    claimAccount(code: String!, displayName: String!, email: String!): AuthPayload!
     markAuthSynced: User!
   }
 
