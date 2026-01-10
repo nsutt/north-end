@@ -183,9 +183,18 @@ export const scoreReactionResolvers = {
           return { action: 'REPLACED', reaction: updatedReaction };
         }
       } else {
-        // No existing reaction - create new
-        const newReaction = await prisma.scoreReaction.create({
-          data: {
+        // No existing reaction - use upsert to handle race conditions
+        // (optimistic updates may cause duplicate requests)
+        const newReaction = await prisma.scoreReaction.upsert({
+          where: {
+            lifeScoreId_userId_groupId: {
+              lifeScoreId,
+              userId: context.user.id,
+              groupId,
+            },
+          },
+          update: { emoji: trimmedEmoji },
+          create: {
             lifeScoreId,
             userId: context.user.id,
             groupId,
