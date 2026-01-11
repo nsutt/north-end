@@ -52,6 +52,7 @@ model LifeScore {
   user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   score      Float
   statusText String?
+  gifUrl     String?
   createdAt  DateTime         @default(now())
   comments   ScoreComment[]
   groups     LifeScoreGroup[]
@@ -122,6 +123,7 @@ model ScoreComment {
   groupId     String?
   group       Group?             @relation(fields: [groupId], references: [id], onDelete: Cascade)
   content     String
+  gifUrl      String?
   createdAt   DateTime           @default(now())
   reactions   CommentReaction[]
 

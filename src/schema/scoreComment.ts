@@ -8,6 +8,7 @@ export const scoreCommentTypeDefs = `#graphql
     groupId: ID
     group: Group
     content: String!
+    gifUrl: String
     createdAt: String!
     isOwnerComment: Boolean!
   }
@@ -21,7 +22,7 @@ export const scoreCommentTypeDefs = `#graphql
   }
 
   extend type Mutation {
-    addScoreComment(lifeScoreId: ID!, groupId: ID!, content: String!): ScoreComment!
+    addScoreComment(lifeScoreId: ID!, groupId: ID!, content: String!, gifUrl: String): ScoreComment!
     deleteScoreComment(commentId: ID!): Boolean!
   }
 `;

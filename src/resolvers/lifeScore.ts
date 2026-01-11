@@ -141,11 +141,42 @@ export const lifeScoreResolvers = {
 
       return sharedGroup ? lifeScore.statusText : null;
     },
+    // Only show gifUrl to the owner or group members (same logic as statusText)
+    gifUrl: async (
+      lifeScore: { id: string; userId: string; gifUrl: string | null },
+      _: any,
+      context: any
+    ) => {
+      if (!lifeScore.gifUrl) return null;
+      if (!context.user) return null;
+
+      // Owner can always see their own GIF
+      if (context.user.id === lifeScore.userId) {
+        return lifeScore.gifUrl;
+      }
+
+      // Check if viewer shares a group with the score owner through this score
+      const sharedGroup = await prisma.lifeScoreGroup.findFirst({
+        where: {
+          lifeScoreId: lifeScore.id,
+          group: {
+            memberships: {
+              some: {
+                userId: context.user.id,
+                status: MembershipStatus.ACCEPTED,
+              },
+            },
+          },
+        },
+      });
+
+      return sharedGroup ? lifeScore.gifUrl : null;
+    },
   },
   Mutation: {
     postLifeScore: async (
       _: any,
-      { score, statusText, groupIds }: { score: number; statusText?: string; groupIds?: string[] },
+      { score, statusText, gifUrl, groupIds }: { score: number; statusText?: string; gifUrl?: string; groupIds?: string[] },
       context: any
     ) => {
       if (!context.user) {
@@ -157,6 +188,14 @@ export const lifeScoreResolvers = {
       // Validate score is between 0 and 10
       if (score < 0 || score > 10) {
         throw new Error('Score must be between 0 and 10');
+      }
+
+      // Validate gifUrl if provided
+      if (gifUrl) {
+        const validGiphyPattern = /^https:\/\/(media\d?\.giphy\.com|giphy\.com)\//;
+        if (!validGiphyPattern.test(gifUrl)) {
+          throw new Error('GIF must be from Giphy');
+        }
       }
 
       // If groupIds provided, verify user is a member of all groups
@@ -181,6 +220,7 @@ export const lifeScoreResolvers = {
             userId,
             score,
             statusText: statusText?.trim() || null,
+            gifUrl: gifUrl || null,
           },
         });
 

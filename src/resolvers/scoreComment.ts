@@ -176,7 +176,7 @@ export const scoreCommentResolvers = {
   Mutation: {
     addScoreComment: async (
       _: any,
-      { lifeScoreId, groupId, content }: { lifeScoreId: string; groupId: string; content: string },
+      { lifeScoreId, groupId, content, gifUrl }: { lifeScoreId: string; groupId: string; content: string; gifUrl?: string },
       context: any
     ) => {
       if (!context.user) {
@@ -204,13 +204,21 @@ export const scoreCommentResolvers = {
         throw new Error('This score was not posted to this group');
       }
 
-      // Validate content
+      // Validate content - must have content or gifUrl
       const trimmedContent = content.trim();
-      if (!trimmedContent) {
-        throw new Error('Comment content cannot be empty');
+      if (!trimmedContent && !gifUrl) {
+        throw new Error('Comment must have content or a GIF');
       }
       if (trimmedContent.length > 500) {
         throw new Error('Comment must be 500 characters or less');
+      }
+
+      // Validate gifUrl if provided
+      if (gifUrl) {
+        const validGiphyPattern = /^https:\/\/(media\d?\.giphy\.com|giphy\.com)\//;
+        if (!validGiphyPattern.test(gifUrl)) {
+          throw new Error('GIF must be from Giphy');
+        }
       }
 
       return await prisma.scoreComment.create({
@@ -219,6 +227,7 @@ export const scoreCommentResolvers = {
           groupId,
           authorId: context.user.id,
           content: trimmedContent,
+          gifUrl: gifUrl || null,
         },
       });
     },
