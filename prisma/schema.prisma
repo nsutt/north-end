@@ -31,6 +31,9 @@ model User {
   // Score reactions
   scoreReactions ScoreReaction[]
 
+  // Comment reactions
+  commentReactions CommentReaction[]
+
   // User connections (deprecated - kept for data preservation)
   sentConnections     UserConnection[] @relation("SentConnections")
   receivedConnections UserConnection[] @relation("ReceivedConnections")
@@ -111,15 +114,16 @@ model Invite {
 }
 
 model ScoreComment {
-  id          String    @id @default(uuid())
+  id          String             @id @default(uuid())
   lifeScoreId String
-  lifeScore   LifeScore @relation(fields: [lifeScoreId], references: [id], onDelete: Cascade)
+  lifeScore   LifeScore          @relation(fields: [lifeScoreId], references: [id], onDelete: Cascade)
   authorId    String
-  author      User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author      User               @relation(fields: [authorId], references: [id], onDelete: Cascade)
   groupId     String?
-  group       Group?    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  group       Group?             @relation(fields: [groupId], references: [id], onDelete: Cascade)
   content     String
-  createdAt   DateTime  @default(now())
+  createdAt   DateTime           @default(now())
+  reactions   CommentReaction[]
 
   @@map("score_comments")
   @@index([lifeScoreId, createdAt])
@@ -218,4 +222,19 @@ model ScoreReaction {
   @@unique([lifeScoreId, userId, groupId])
   @@map("score_reactions")
   @@index([lifeScoreId, groupId])
+}
+
+// Comment reactions (tap backs on comments)
+model CommentReaction {
+  id        String       @id @default(uuid())
+  commentId String
+  comment   ScoreComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emoji     String
+  createdAt DateTime     @default(now())
+
+  @@unique([commentId, userId])
+  @@map("comment_reactions")
+  @@index([commentId])
 }

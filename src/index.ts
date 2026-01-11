@@ -1,6 +1,8 @@
 import 'dotenv/config';
+import express from 'express';
+import cors from 'cors';
 import { ApolloServer } from '@apollo/server';
-import { startStandaloneServer } from '@apollo/server/standalone';
+import { expressMiddleware } from '@as-integrations/express5';
 import { makeExecutableSchema } from '@graphql-tools/schema';
 import { applyMiddleware } from 'graphql-middleware';
 import { userTypeDefs } from './schema/user';
@@ -15,10 +17,13 @@ import { scoreCommentTypeDefs } from './schema/scoreComment';
 import { scoreCommentResolvers } from './resolvers/scoreComment';
 import { scoreReactionTypeDefs } from './schema/scoreReaction';
 import { scoreReactionResolvers } from './resolvers/scoreReaction';
+import { commentReactionTypeDefs } from './schema/commentReaction';
+import { commentReactionResolvers } from './resolvers/commentReaction';
 import { groupTypeDefs } from './schema/group';
 import { groupResolvers } from './resolvers/group';
 import { verifyToken, extractTokenFromHeader } from './utils/auth';
 import { permissions } from './permissions';
+import { shareRouter } from './routes/share';
 
 const baseTypeDefs = `#graphql
   type Query {
@@ -44,10 +49,13 @@ const baseResolvers = {
   },
 };
 
-const typeDefs = [baseTypeDefs, userTypeDefs, lifeScoreTypeDefs, wormScoreTypeDefs, inviteTypeDefs, scoreCommentTypeDefs, scoreReactionTypeDefs, groupTypeDefs];
-const resolvers = [baseResolvers, userResolvers, lifeScoreResolvers, wormScoreResolvers, inviteResolvers, scoreCommentResolvers, scoreReactionResolvers, groupResolvers];
+const typeDefs = [baseTypeDefs, userTypeDefs, lifeScoreTypeDefs, wormScoreTypeDefs, inviteTypeDefs, scoreCommentTypeDefs, scoreReactionTypeDefs, commentReactionTypeDefs, groupTypeDefs];
+const resolvers = [baseResolvers, userResolvers, lifeScoreResolvers, wormScoreResolvers, inviteResolvers, scoreCommentResolvers, scoreReactionResolvers, commentReactionResolvers, groupResolvers];
 
 async function startServer() {
+  const app = express();
+  const port = Number(process.env.PORT) || 4000;
+
   // Create executable schema
   const schema = makeExecutableSchema({
     typeDefs,
@@ -63,35 +71,53 @@ async function startServer() {
     introspection: true,
   });
 
-  const { url } = await startStandaloneServer(server, {
-    listen: { port: Number(process.env.PORT) || 4000 },
-    context: async ({ req }) => {
-      // Extract token from Authorization header
-      const token = extractTokenFromHeader(req.headers.authorization);
+  await server.start();
 
-      if (!token) {
-        return { user: null };
-      }
+  // Share routes (for OG meta tags and images)
+  app.use('/vibe-check/share', shareRouter);
 
-      // Verify token and get user
-      const payload = verifyToken(token);
-      if (!payload) {
-        return { user: null };
-      }
+  // GraphQL endpoint
+  app.use(
+    '/graphql',
+    cors(),
+    express.json(),
+    expressMiddleware(server, {
+      context: async ({ req }: { req: express.Request }) => {
+        // Extract token from Authorization header
+        const token = extractTokenFromHeader(req.headers.authorization);
 
-      // Get user from database
-      const user = await getUserById(payload.userId);
-      if (!user) {
-        return { user: null };
-      }
+        if (!token) {
+          return { user: null };
+        }
 
-      return { user };
-    },
+        // Verify token and get user
+        const payload = verifyToken(token);
+        if (!payload) {
+          return { user: null };
+        }
+
+        // Get user from database
+        const user = await getUserById(payload.userId);
+        if (!user) {
+          return { user: null };
+        }
+
+        return { user };
+      },
+    })
+  );
+
+  // Health check
+  app.get('/health', (_, res) => {
+    res.json({ status: 'ok' });
   });
 
-  console.log(`🚀 Server ready at: ${url}`);
-  console.log(`📊 GraphQL Playground: ${url}`);
-  console.log(`🌍 CORS: Enabled (accepts all origins by default)`);
+  app.listen(port, () => {
+    console.log(`🚀 Server ready at: http://localhost:${port}/graphql`);
+    console.log(`📊 GraphQL Playground: http://localhost:${port}/graphql`);
+    console.log(`🔗 Share routes: http://localhost:${port}/share`);
+    console.log(`🌍 CORS: Enabled (accepts all origins by default)`);
+  });
 }
 
 startServer().catch((error) => {

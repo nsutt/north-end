@@ -57,6 +57,66 @@ export const scoreCommentResolvers = {
       });
       return lifeScore?.userId === parent.authorId;
     },
+    // Comment reactions
+    reactionSummary: async (
+      parent: { id: string },
+      _args: any,
+      context: any
+    ) => {
+      const reactions = await prisma.commentReaction.findMany({
+        where: {
+          commentId: parent.id,
+        },
+        include: {
+          user: true,
+        },
+      });
+
+      // Group by emoji
+      const emojiMap = new Map<string, { count: number; userIds: Set<string>; users: any[] }>();
+
+      for (const reaction of reactions) {
+        if (!emojiMap.has(reaction.emoji)) {
+          emojiMap.set(reaction.emoji, { count: 0, userIds: new Set(), users: [] });
+        }
+        const group = emojiMap.get(reaction.emoji)!;
+        group.count++;
+        group.userIds.add(reaction.userId);
+        group.users.push(reaction.user);
+      }
+
+      const currentUserId = context.user?.id;
+
+      return Array.from(emojiMap.entries()).map(([emoji, { count, userIds, users }]) => ({
+        emoji,
+        count,
+        hasReacted: currentUserId ? userIds.has(currentUserId) : false,
+        users,
+      }));
+    },
+    myReaction: async (
+      parent: { id: string },
+      _args: any,
+      context: any
+    ) => {
+      if (!context.user) return null;
+
+      const reaction = await prisma.commentReaction.findUnique({
+        where: {
+          commentId_userId: {
+            commentId: parent.id,
+            userId: context.user.id,
+          },
+        },
+      });
+
+      if (!reaction) return null;
+
+      return {
+        id: reaction.id,
+        emoji: reaction.emoji,
+      };
+    },
   },
 
   LifeScore: {
