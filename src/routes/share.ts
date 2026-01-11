@@ -115,7 +115,7 @@ shareRouter.get('/og-image/:scoreId', async (req, res) => {
           },
           children,
         },
-      },
+      } as any,
       {
         width: 800,
         height: 418,
