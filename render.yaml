@@ -15,3 +15,7 @@ services:
         value: 4000
       - key: DATABASE_URL
         sync: false  # Will be set manually from Render PostgreSQL
+      - key: LIFE_SCORE_URL
+        sync: false  # Set to your life-score frontend URL
+      - key: API_URL
+        sync: false  # Set to your API URL (e.g., https://api.vibecheck.app)
