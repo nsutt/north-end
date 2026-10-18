@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma';
 import { getUserById } from './user';
 import { MembershipStatus } from '@prisma/client';
+import { notifyNewComment } from '../utils/notifications';
 
 // Helper: Check if user is a member of a group
 async function isGroupMember(userId: string, groupId: string): Promise<boolean> {
@@ -221,7 +222,7 @@ export const scoreCommentResolvers = {
         }
       }
 
-      return await prisma.scoreComment.create({
+      const comment = await prisma.scoreComment.create({
         data: {
           lifeScoreId,
           groupId,
@@ -230,6 +231,16 @@ export const scoreCommentResolvers = {
           gifUrl: gifUrl || null,
         },
       });
+
+      notifyNewComment({
+        lifeScoreId,
+        groupId,
+        authorId: context.user.id,
+        content: trimmedContent,
+        hasGif: Boolean(gifUrl),
+      });
+
+      return comment;
     },
 
     deleteScoreComment: async (

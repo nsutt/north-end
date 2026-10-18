@@ -43,7 +43,25 @@ model User {
   groupMemberships GroupMembership[]
   groupInvitesSent GroupMembership[] @relation("GroupInviter")
 
+  // Push notification device tokens
+  deviceTokens DeviceToken[]
+
   @@map("users")
+}
+
+// An iOS device registered for push notifications (APNs)
+model DeviceToken {
+  id          String   @id @default(uuid())
+  token       String   @unique
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform    String   @default("ios")
+  environment String   @default("production") // "sandbox" for debug builds
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+  @@map("device_tokens")
 }
 
 model LifeScore {

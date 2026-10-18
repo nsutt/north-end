@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma';
 import { getUserById } from './user';
 import { MembershipStatus } from '@prisma/client';
+import { notifyNewVibe } from '../utils/notifications';
 
 export const lifeScoreResolvers = {
   Query: {
@@ -235,6 +236,14 @@ export const lifeScoreResolvers = {
         }
 
         return newScore;
+      });
+
+      notifyNewVibe({
+        lifeScoreId: lifeScore.id,
+        authorId: userId,
+        score: lifeScore.score,
+        statusText: lifeScore.statusText,
+        groupIds: groupIds ?? [],
       });
 
       return lifeScore;
