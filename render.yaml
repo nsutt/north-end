@@ -19,3 +19,12 @@ services:
         sync: false  # Set to your life-score frontend URL
       - key: API_URL
         sync: false  # Set to your API URL (e.g., https://api.vibecheck.app)
+      # Push notifications (APNs .p8 auth key from developer.apple.com). Optional: sends are skipped without them.
+      - key: APNS_KEY_ID
+        sync: false
+      - key: APNS_TEAM_ID
+        sync: false
+      - key: APNS_PRIVATE_KEY
+        sync: false  # Contents of the .p8 file
+      - key: APNS_BUNDLE_ID
+        value: app.vibecheck.ios

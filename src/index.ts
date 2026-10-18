@@ -21,6 +21,8 @@ import { commentReactionTypeDefs } from './schema/commentReaction';
 import { commentReactionResolvers } from './resolvers/commentReaction';
 import { groupTypeDefs } from './schema/group';
 import { groupResolvers } from './resolvers/group';
+import { deviceTypeDefs } from './schema/device';
+import { deviceResolvers } from './resolvers/device';
 import { verifyToken, extractTokenFromHeader } from './utils/auth';
 import { permissions } from './permissions';
 import { shareRouter } from './routes/share';
@@ -49,8 +51,8 @@ const baseResolvers = {
   },
 };
 
-const typeDefs = [baseTypeDefs, userTypeDefs, lifeScoreTypeDefs, wormScoreTypeDefs, inviteTypeDefs, scoreCommentTypeDefs, scoreReactionTypeDefs, commentReactionTypeDefs, groupTypeDefs];
-const resolvers = [baseResolvers, userResolvers, lifeScoreResolvers, wormScoreResolvers, inviteResolvers, scoreCommentResolvers, scoreReactionResolvers, commentReactionResolvers, groupResolvers];
+const typeDefs = [baseTypeDefs, userTypeDefs, lifeScoreTypeDefs, wormScoreTypeDefs, inviteTypeDefs, scoreCommentTypeDefs, scoreReactionTypeDefs, commentReactionTypeDefs, groupTypeDefs, deviceTypeDefs];
+const resolvers = [baseResolvers, userResolvers, lifeScoreResolvers, wormScoreResolvers, inviteResolvers, scoreCommentResolvers, scoreReactionResolvers, commentReactionResolvers, groupResolvers, deviceResolvers];
 
 async function startServer() {
   const app = express();

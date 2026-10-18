@@ -92,6 +92,10 @@ export const permissions = shield(
       declineGroupInvite: isAuthenticated,
       leaveGroup: isAuthenticated,
       removeFromGroup: isAuthenticated,
+
+      // Push notifications
+      registerDeviceToken: isAuthenticated,
+      unregisterDeviceToken: isAuthenticated,
     },
   },
   {
