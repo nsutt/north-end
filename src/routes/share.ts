@@ -158,11 +158,25 @@ shareRouter.get('/og-image/:scoreId', async (req, res) => {
   }
 });
 
+// Escape user-controlled text before putting it in HTML (element text or attribute values)
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// IDs are UUIDs; anything else in the query string is ignored
+const ID_PATTERN = /^[A-Za-z0-9-]{1,64}$/;
+
 // Share page with OG meta tags
 shareRouter.get('/score/:scoreId', async (req, res) => {
   try {
     const { scoreId } = req.params;
-    const groupId = req.query.groupId as string | undefined;
+    const rawGroupId = req.query.groupId;
+    const groupId = typeof rawGroupId === 'string' && ID_PATTERN.test(rawGroupId) ? rawGroupId : undefined;
 
     const lifeScore = await prisma.lifeScore.findUnique({
       where: { id: scoreId },
@@ -177,37 +191,44 @@ shareRouter.get('/score/:scoreId', async (req, res) => {
     const description = lifeScore.statusText
       ? `${lifeScore.score} • ${lifeScore.statusText}`
       : `${lifeScore.score}`;
-    const imageUrl = `${API_URL}/vibe-check/share/og-image/${scoreId}`;
+    const imageUrl = `${API_URL}/vibe-check/share/og-image/${encodeURIComponent(lifeScore.id)}`;
     const pageUrl = groupId
-      ? `${LIFE_SCORE_URL}/group/${groupId}/score/${scoreId}`
+      ? `${LIFE_SCORE_URL}/group/${groupId}/score/${encodeURIComponent(lifeScore.id)}`
       : `${LIFE_SCORE_URL}`;
+
+    const safeTitle = escapeHtml(title);
+    const safeDescription = escapeHtml(description);
+    const safeImageUrl = escapeHtml(imageUrl);
+    const safePageUrl = escapeHtml(pageUrl);
+    // JSON-encode for the script context, and stop "</script>" from closing the tag early
+    const scriptPageUrl = JSON.stringify(pageUrl).replace(/</g, '\\u003c');
 
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title}</title>
+  <title>${safeTitle}</title>
 
   <meta property="og:type" content="website">
-  <meta property="og:url" content="${pageUrl}">
-  <meta property="og:title" content="${title}">
-  <meta property="og:description" content="${description}">
-  <meta property="og:image" content="${imageUrl}">
+  <meta property="og:url" content="${safePageUrl}">
+  <meta property="og:title" content="${safeTitle}">
+  <meta property="og:description" content="${safeDescription}">
+  <meta property="og:image" content="${safeImageUrl}">
   <meta property="og:image:width" content="800">
   <meta property="og:image:height" content="418">
   <meta property="og:site_name" content="Vibe Check">
 
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="${title}">
-  <meta name="twitter:description" content="${description}">
-  <meta name="twitter:image" content="${imageUrl}">
+  <meta name="twitter:title" content="${safeTitle}">
+  <meta name="twitter:description" content="${safeDescription}">
+  <meta name="twitter:image" content="${safeImageUrl}">
 
-  <meta http-equiv="refresh" content="0;url=${pageUrl}">
+  <meta http-equiv="refresh" content="0;url=${safePageUrl}">
 </head>
 <body>
   <p>Redirecting to Vibe Check...</p>
-  <script>window.location.href = "${pageUrl}";</script>
+  <script>window.location.href = ${scriptPageUrl};</script>
 </body>
 </html>`;
 
