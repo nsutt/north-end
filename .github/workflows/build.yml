@@ -1,0 +1,32 @@
+# Checks that the server builds (Prisma client generation + TypeScript compile)
+# on every pull request and on pushes to main.
+name: Build
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # No database needed: this only generates the Prisma client and runs tsc.
+      - run: npm run build
