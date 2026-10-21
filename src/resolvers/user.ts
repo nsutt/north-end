@@ -91,8 +91,14 @@ export const userResolvers = {
     },
     updateUser: async (
       _: any,
-      { id, input }: { id: string; input: UpdateUserInput }
+      { id, input }: { id: string; input: UpdateUserInput },
+      context: any
     ) => {
+      // Users can only edit their own profile
+      if (!context.user || context.user.id !== id) {
+        throw new Error('You can only update your own profile');
+      }
+
       const user = await prisma.user.update({
         where: { id },
         data: {
@@ -102,7 +108,15 @@ export const userResolvers = {
       });
       return user;
     },
-    deleteUser: async (_: any, { id }: { id: string }) => {
+    deleteUser: async (_: any, { id }: { id: string }, context: any) => {
+      // Users can delete their own account; deleting others needs the
+      // can-delete-any-user feature flag (the same flag the web UI checks)
+      const isSelf = context.user?.id === id;
+      const canDeleteAnyUser = context.user?.features?.includes('can-delete-any-user') ?? false;
+      if (!context.user || (!isSelf && !canDeleteAnyUser)) {
+        throw new Error('You can only delete your own account');
+      }
+
       // Delete the user (cascade will delete all related lifeScores)
       await prisma.user.delete({
         where: { id },
