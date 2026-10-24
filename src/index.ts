@@ -3,71 +3,17 @@ import express from 'express';
 import cors from 'cors';
 import { ApolloServer } from '@apollo/server';
 import { expressMiddleware } from '@as-integrations/express5';
-import { makeExecutableSchema } from '@graphql-tools/schema';
-import { applyMiddleware } from 'graphql-middleware';
-import { userTypeDefs } from './schema/user';
-import { userResolvers, getUserById } from './resolvers/user';
-import { lifeScoreTypeDefs } from './schema/lifeScore';
-import { lifeScoreResolvers } from './resolvers/lifeScore';
-import { wormScoreTypeDefs } from './schema/wormScore';
-import { wormScoreResolvers } from './resolvers/wormScore';
-import { inviteTypeDefs } from './schema/invite';
-import { inviteResolvers } from './resolvers/invite';
-import { scoreCommentTypeDefs } from './schema/scoreComment';
-import { scoreCommentResolvers } from './resolvers/scoreComment';
-import { scoreReactionTypeDefs } from './schema/scoreReaction';
-import { scoreReactionResolvers } from './resolvers/scoreReaction';
-import { commentReactionTypeDefs } from './schema/commentReaction';
-import { commentReactionResolvers } from './resolvers/commentReaction';
-import { groupTypeDefs } from './schema/group';
-import { groupResolvers } from './resolvers/group';
-import { deviceTypeDefs } from './schema/device';
-import { deviceResolvers } from './resolvers/device';
-import { appleAuthTypeDefs } from './schema/appleAuth';
-import { appleAuthResolvers } from './resolvers/appleAuth';
+import { getUserById } from './resolvers/user';
 import { verifyToken, extractTokenFromHeader } from './utils/auth';
-import { permissions } from './permissions';
 import { shareRouter } from './routes/share';
-
-const baseTypeDefs = `#graphql
-  type Query {
-    hello: String
-    serverStatus: ServerStatus
-  }
-
-  type ServerStatus {
-    version: String!
-    uptime: Float!
-    ready: Boolean!
-  }
-`;
-
-const baseResolvers = {
-  Query: {
-    hello: () => 'Welcome to North End Game Server!',
-    serverStatus: () => ({
-      version: '1.0.0',
-      uptime: process.uptime(),
-      ready: true,
-    }),
-  },
-};
-
-const typeDefs = [baseTypeDefs, userTypeDefs, lifeScoreTypeDefs, wormScoreTypeDefs, inviteTypeDefs, scoreCommentTypeDefs, scoreReactionTypeDefs, commentReactionTypeDefs, groupTypeDefs, deviceTypeDefs, appleAuthTypeDefs];
-const resolvers = [baseResolvers, userResolvers, lifeScoreResolvers, wormScoreResolvers, inviteResolvers, scoreCommentResolvers, scoreReactionResolvers, commentReactionResolvers, groupResolvers, deviceResolvers, appleAuthResolvers];
+import { buildSchema } from './schemaBuilder';
 
 async function startServer() {
   const app = express();
   const port = Number(process.env.PORT) || 4000;
 
-  // Create executable schema
-  const schema = makeExecutableSchema({
-    typeDefs,
-    resolvers,
-  });
-
-  // Apply GraphQL Shield middleware
-  const schemaWithPermissions = applyMiddleware(schema, permissions);
+  // Executable schema with GraphQL Shield middleware applied
+  const schemaWithPermissions = buildSchema();
 
   const server = new ApolloServer({
     schema: schemaWithPermissions,
