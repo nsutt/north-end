@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma';
 import { generateToken } from '../utils/auth';
+import { setViewer } from './user';
 import { generateUniqueCodeSafe } from '../utils/codeGenerator';
 import { verifyAppleIdentityToken } from '../utils/appleAuth';
 
@@ -7,12 +8,14 @@ export const appleAuthResolvers = {
   Mutation: {
     signInWithApple: async (
       _: any,
-      { identityToken, nonce, displayName }: { identityToken: string; nonce: string; displayName?: string }
+      { identityToken, nonce, displayName }: { identityToken: string; nonce: string; displayName?: string },
+      context: any
     ) => {
       const apple = await verifyAppleIdentityToken(identityToken, nonce);
 
       const existing = await prisma.user.findFirst({ where: { appleUserId: apple.sub } });
       if (existing) {
+        setViewer(context, existing.id);
         return { token: generateToken(existing.id), user: existing, isNewUser: false };
       }
 
@@ -33,6 +36,7 @@ export const appleAuthResolvers = {
         },
       });
 
+      setViewer(context, user.id);
       return { token: generateToken(user.id), user, isNewUser: true };
     },
 

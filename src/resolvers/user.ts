@@ -19,6 +19,18 @@ export async function getUserById(id: string) {
   });
 }
 
+// Sign-in/sign-up mutations call this with the account they just issued a token
+// for, so that account's private fields resolve in the same response even though
+// context.user is still null for this request
+export function setViewer(context: any, userId: string) {
+  context.viewerId = userId;
+}
+
+// Whether the user being resolved is the person making the request
+function isViewer(context: any, userId: string) {
+  return context.user?.id === userId || context.viewerId === userId;
+}
+
 export const userResolvers = {
   Query: {
     user: async (_: any, { id }: { id: string }) => {
@@ -56,7 +68,6 @@ export const userResolvers = {
       console.log('🔍 ME Query Debug:', {
         userId: user?.id,
         displayName: user?.displayName,
-        uniqueCode: user?.uniqueCode,
         hasUniqueCode: !!user?.uniqueCode
       });
 
@@ -64,7 +75,7 @@ export const userResolvers = {
     },
   },
   Mutation: {
-    createUser: async (_: any, { input }: { input: CreateUserInput }) => {
+    createUser: async (_: any, { input }: { input: CreateUserInput }, context: any) => {
       // Validate displayName is provided and not empty
       if (!input.displayName?.trim()) {
         throw new Error('Display name is required');
@@ -83,6 +94,7 @@ export const userResolvers = {
 
       // Generate JWT token
       const token = generateToken(user.id);
+      setViewer(context, user.id);
 
       return {
         user,
@@ -124,7 +136,7 @@ export const userResolvers = {
 
       return true;
     },
-    loginWithCode: async (_: any, { code }: { code: string }) => {
+    loginWithCode: async (_: any, { code }: { code: string }, context: any) => {
       // Find user by unique code (case-insensitive)
       const user = await prisma.user.findUnique({
         where: { uniqueCode: code.toLowerCase().trim() },
@@ -136,6 +148,7 @@ export const userResolvers = {
 
       // Generate token for existing user
       const token = generateToken(user.id);
+      setViewer(context, user.id);
 
       return {
         user,
@@ -160,7 +173,8 @@ export const userResolvers = {
     },
     claimAccount: async (
       _: any,
-      { code, displayName, email }: { code: string; displayName: string; email: string }
+      { code, displayName, email }: { code: string; displayName: string; email: string },
+      context: any
     ) => {
       // Validate displayName
       if (!displayName?.trim()) {
@@ -213,6 +227,7 @@ export const userResolvers = {
 
       // Generate token
       const token = generateToken(user.id);
+      setViewer(context, user.id);
 
       return {
         user,
@@ -233,6 +248,14 @@ export const userResolvers = {
     },
   },
   User: {
+    // Login codes and emails are private: only the user themselves can see them.
+    // Others get null (not an error) so lists and nested users still resolve.
+    uniqueCode: (parent: { id: string; uniqueCode?: string | null }, _: any, context: any) => {
+      return isViewer(context, parent.id) ? parent.uniqueCode ?? null : null;
+    },
+    email: (parent: { id: string; email?: string | null }, _: any, context: any) => {
+      return isViewer(context, parent.id) ? parent.email ?? null : null;
+    },
     // Serialize DateTime fields to ISO strings
     createdAt: (parent: { createdAt: Date }) => {
       return parent.createdAt.toISOString();

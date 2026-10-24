@@ -1,5 +1,5 @@
 import { prisma } from '../lib/prisma';
-import { getUserById } from './user';
+import { getUserById, setViewer } from './user';
 import { GroupRole, MembershipStatus } from '@prisma/client';
 import { generateToken } from '../utils/auth';
 import { generateUniqueCodeSafe } from '../utils/codeGenerator';
@@ -474,7 +474,8 @@ export const groupResolvers = {
 
     createAccountAndJoinGroup: async (
       _: any,
-      { code, displayName, email }: { code: string; displayName: string; email: string }
+      { code, displayName, email }: { code: string; displayName: string; email: string },
+      context: any
     ) => {
       // Validate displayName
       if (!displayName?.trim()) {
@@ -537,6 +538,7 @@ export const groupResolvers = {
 
       // Generate token for the new user
       const token = generateToken(result.user.id);
+      setViewer(context, result.user.id);
 
       return {
         token,
