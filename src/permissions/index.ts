@@ -96,6 +96,10 @@ export const permissions = shield(
       // Push notifications
       registerDeviceToken: isAuthenticated,
       unregisterDeviceToken: isAuthenticated,
+
+      // Sign in with Apple
+      signInWithApple: allow,
+      connectAppleId: isAuthenticated,
     },
   },
   {

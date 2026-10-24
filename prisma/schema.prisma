@@ -15,6 +15,10 @@ model User {
   displayName  String
   avatarUrl    String?
   uniqueCode   String?     @unique
+  // Sign in with Apple's stable user identifier ("sub"). One account per Apple ID is
+  // enforced in the resolvers: a unique constraint here would make the Render
+  // build's `prisma db push` stop with a data-loss warning.
+  appleUserId  String?
   authSyncedAt DateTime?
   features     String[]    @default([])
   createdAt    DateTime    @default(now())
@@ -42,6 +46,8 @@ model User {
   createdGroups    Group[]           @relation("CreatedGroups")
   groupMemberships GroupMembership[]
   groupInvitesSent GroupMembership[] @relation("GroupInviter")
+
+  @@index([appleUserId])
 
   // Push notification device tokens
   deviceTokens DeviceToken[]
