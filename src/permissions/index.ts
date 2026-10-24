@@ -29,11 +29,11 @@ export const permissions = shield(
       // Public queries
       hello: allow,
       serverStatus: allow,
-      user: allow,
-      users: allow,
       allUsers: isAuthenticated,
 
       // Protected queries
+      user: isAuthenticated,
+      users: isAuthenticated,
       me: isAuthenticated,
 
       // Worm score queries
