@@ -1,6 +1,6 @@
 import { after, beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { closeDatabase, createGroup, createUser, executeError, executeOk, prisma, resetDatabase } from './helpers';
+import { closeDatabase, createGroup, createLifeScore, createUser, executeError, executeOk, prisma, resetDatabase } from './helpers';
 
 beforeEach(resetDatabase);
 after(closeDatabase);
@@ -80,5 +80,119 @@ describe('postLifeScore', () => {
     const user = await createUser();
     const message = await executeError(POST_LIFE_SCORE, { score: 5, gifUrl: 'https://evil.example/x.gif' }, user);
     assert.match(message, /GIF must be from Giphy/);
+  });
+});
+
+describe('vibe visibility', () => {
+  /**
+   * The author shares one group with the viewer and has another the viewer isn't in.
+   * Vibes, oldest first: shared (to the shared group), hidden (to the other group),
+   * solo (to no group).
+   */
+  async function setup() {
+    const author = await createUser();
+    const viewer = await createUser();
+    const shared = await createGroup(author, [viewer], 'Shared');
+    const other = await createGroup(author, [], 'Other');
+    const at = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000);
+
+    const sharedVibe = await createLifeScore(author, [shared.id], { score: 6, statusText: 'shared' });
+    const hiddenVibe = await createLifeScore(author, [other.id], { score: 2, statusText: 'hidden' });
+    const soloVibe = await createLifeScore(author, [], { score: 9 });
+    await prisma.lifeScore.update({ where: { id: sharedVibe.id }, data: { createdAt: at(30) } });
+    await prisma.lifeScore.update({ where: { id: hiddenVibe.id }, data: { createdAt: at(20) } });
+    await prisma.lifeScore.update({ where: { id: soloVibe.id }, data: { createdAt: at(10) } });
+
+    return { author, viewer, shared, other, sharedVibe, hiddenVibe, soloVibe };
+  }
+
+  const LIFE_SCORE = `#graphql
+    query ($id: ID!) { lifeScore(id: $id) { id statusText } }
+  `;
+  const PROFILE = `#graphql
+    query ($id: ID!) { user(id: $id) { id currentScore { id } lifeScores { id } } }
+  `;
+
+  test('lifeScore(id): visible to a member of a group it was posted to, null otherwise', async () => {
+    const { viewer, sharedVibe, hiddenVibe, soloVibe } = await setup();
+
+    const visible = await executeOk(LIFE_SCORE, { id: sharedVibe.id }, viewer);
+    assert.deepEqual(visible.lifeScore, { id: sharedVibe.id, statusText: 'shared' });
+
+    for (const vibe of [hiddenVibe, soloVibe]) {
+      const data = await executeOk(LIFE_SCORE, { id: vibe.id }, viewer);
+      assert.equal(data.lifeScore, null);
+    }
+  });
+
+  test('lifeScore(id): the owner sees all their vibes', async () => {
+    const { author, sharedVibe, hiddenVibe, soloVibe } = await setup();
+    for (const vibe of [sharedVibe, hiddenVibe, soloVibe]) {
+      const data = await executeOk(LIFE_SCORE, { id: vibe.id }, author);
+      assert.equal(data.lifeScore.id, vibe.id);
+    }
+  });
+
+  test('lifeScore(id): a pending invitee of the group cannot see it, and login is required', async () => {
+    const { author, other, hiddenVibe } = await setup();
+    const invitee = await createUser();
+    await prisma.groupMembership.create({ data: { groupId: other.id, userId: invitee.id, invitedById: author.id } });
+
+    assert.equal((await executeOk(LIFE_SCORE, { id: hiddenVibe.id }, invitee)).lifeScore, null);
+    assert.match(await executeError(LIFE_SCORE, { id: hiddenVibe.id }), /logged in/);
+  });
+
+  test("User.lifeScores and User.currentScore only include vibes the viewer can see", async () => {
+    const { author, viewer, sharedVibe } = await setup();
+
+    const data = await executeOk(PROFILE, { id: author.id }, viewer);
+    assert.deepEqual(data.user, { id: author.id, currentScore: { id: sharedVibe.id }, lifeScores: [{ id: sharedVibe.id }] });
+
+    // Someone who shares no group sees nothing
+    const stranger = await createUser();
+    const none = await executeOk(PROFILE, { id: author.id }, stranger);
+    assert.deepEqual(none.user, { id: author.id, currentScore: null, lifeScores: [] });
+  });
+
+  test('the user themselves sees all their vibes via me and user(id)', async () => {
+    const { author, sharedVibe, hiddenVibe, soloVibe } = await setup();
+    const expected = { currentScore: { id: soloVibe.id }, lifeScores: [soloVibe, hiddenVibe, sharedVibe].map((v) => ({ id: v.id })) };
+
+    const me = await executeOk(`{ me { id currentScore { id } lifeScores { id } } }`, {}, author);
+    assert.deepEqual(me.me, { id: author.id, ...expected });
+
+    const profile = await executeOk(PROFILE, { id: author.id }, author);
+    assert.deepEqual(profile.user, { id: author.id, ...expected });
+  });
+
+  test('the group feed and Home still work for members', async () => {
+    const { author, viewer, shared, sharedVibe } = await setup();
+
+    const feed = await executeOk(
+      `query ($groupId: ID!) { groupScores(groupId: $groupId) { id statusText user { id } } }`,
+      { groupId: shared.id },
+      viewer
+    );
+    assert.deepEqual(feed.groupScores, [{ id: sharedVibe.id, statusText: 'shared', user: { id: author.id } }]);
+
+    const home = await executeOk(`{ myGroups { id recentActivity { user { id } score } } }`, {}, viewer);
+    assert.deepEqual(home.myGroups, [{ id: shared.id, recentActivity: { user: { id: author.id }, score: 6 } }]);
+  });
+});
+
+describe('User.features', () => {
+  test('are only visible to the user themselves', async () => {
+    const alice = await createUser({ features: ['can-delete-any-user', 'can-logout'] });
+    const bob = await createUser();
+
+    const mine = await executeOk(`{ me { features } }`, {}, alice);
+    assert.deepEqual(mine.me.features, ['can-delete-any-user', 'can-logout']);
+
+    const theirs = await executeOk(`query ($id: ID!) { user(id: $id) { features } }`, { id: alice.id }, bob);
+    assert.deepEqual(theirs.user.features, []);
+
+    const all = await executeOk(`{ allUsers { id features } }`, {}, bob);
+    const aliceRow = all.allUsers.find((u: { id: string }) => u.id === alice.id);
+    assert.deepEqual(aliceRow.features, []);
   });
 });

@@ -45,7 +45,7 @@ export const permissions = shield(
       invite: allow,
 
       // Life score queries
-      lifeScore: allow,
+      lifeScore: isAuthenticated,
       groupScores: isAuthenticated,
 
       // Score comment queries
