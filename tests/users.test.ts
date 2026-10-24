@@ -83,8 +83,7 @@ describe('deleteUser', () => {
 });
 
 describe('User field privacy', () => {
-  // TODO(privacy): enable once the User field privacy fix (src/resolvers/user.ts) is merged.
-  test.skip('TODO: User.uniqueCode and User.email are only visible to the user themselves', async () => {
+  test('User.uniqueCode and User.email are only visible to the user themselves', async () => {
     const alice = await createUser({ email: 'alice@example.test' });
     const bob = await createUser();
     const fields = 'id email uniqueCode';
