@@ -1,5 +1,5 @@
 # Checks that the server builds (Prisma client generation + TypeScript compile)
-# on every pull request and on pushes to main.
+# and that the test suite passes, on every pull request and on pushes to main.
 name: Build
 
 on:
@@ -18,6 +18,26 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+
+    # Throwaway database for the tests (never a real one; tests truncate every table)
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: north_end_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/north_end_test
+
     steps:
       - uses: actions/checkout@v4
 
@@ -28,5 +48,14 @@ jobs:
 
       - run: npm ci
 
-      # No database needed: this only generates the Prisma client and runs tsc.
+      # Generates the Prisma client and runs tsc.
       - run: npm run build
+
+      - name: Type-check tests
+        run: npm run test:typecheck
+
+      - name: Push schema to the test database
+        run: npm run test:db-push
+
+      - name: Run tests
+        run: npm run test:run

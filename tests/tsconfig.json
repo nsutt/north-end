@@ -1,0 +1,9 @@
+{
+  // Type-checks the tests (`npm run test:typecheck`) without adding them to the app build.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "noEmit": true
+  },
+  "include": ["../src/**/*", "./**/*"]
+}
