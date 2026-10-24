@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma';
 import { generateUniqueCodeSafe } from '../utils/codeGenerator';
+import { isViewer } from '../utils/access';
 
 export const inviteResolvers = {
   Invite: {
@@ -14,7 +15,10 @@ export const inviteResolvers = {
         where: { id: parent.createdById },
       });
     },
-    usedBy: async (parent: { id: string }) => {
+    // invite(code) is public (the claim flow), so only the invite's creator sees
+    // who signed up with it
+    usedBy: async (parent: { id: string; createdById: string }, _: any, context: any) => {
+      if (!isViewer(context, parent.createdById)) return [];
       return await prisma.user.findMany({
         where: { usedInviteId: parent.id },
       });
@@ -31,6 +35,7 @@ export const inviteResolvers = {
         throw new Error('You must be logged in to view invites');
       }
       return await prisma.invite.findMany({
+        where: { createdById: context.user.id },
         orderBy: { createdAt: 'desc' },
       });
     },
@@ -96,6 +101,19 @@ export const inviteResolvers = {
     deleteInvite: async (_: any, { id }: { id: string }, context: any) => {
       if (!context.user) {
         throw new Error('You must be logged in to delete invites');
+      }
+
+      // Only allow deleting your own invites
+      const invite = await prisma.invite.findUnique({
+        where: { id },
+      });
+
+      if (!invite) {
+        throw new Error('Invite not found');
+      }
+
+      if (invite.createdById !== context.user.id) {
+        throw new Error('You can only delete your own invites');
       }
 
       await prisma.invite.delete({
