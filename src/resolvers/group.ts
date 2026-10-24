@@ -3,10 +3,20 @@ import { getUserById, setViewer } from './user';
 import { GroupRole, MembershipStatus } from '@prisma/client';
 import { generateToken } from '../utils/auth';
 import { generateUniqueCodeSafe } from '../utils/codeGenerator';
+import { isAcceptedMember, isViewer, viewerIdOf } from '../utils/access';
 
 export const groupResolvers = {
   Query: {
-    group: async (_: any, { id }: { id: string }) => {
+    group: async (_: any, { id }: { id: string }, context: any) => {
+      if (!context.user) {
+        throw new Error('You must be logged in to view a group');
+      }
+
+      // Only accepted members can read a group; don't reveal whether it exists
+      if (!(await isAcceptedMember(context.user.id, id))) {
+        throw new Error('Group not found');
+      }
+
       return await prisma.group.findUnique({
         where: { id },
       });
@@ -363,6 +373,28 @@ export const groupResolvers = {
         throw new Error('You must be logged in');
       }
 
+      const lifeScore = await prisma.lifeScore.findUnique({
+        where: { id: lifeScoreId },
+        select: { userId: true },
+      });
+      if (!lifeScore) {
+        throw new Error('Life score not found');
+      }
+
+      // Same access as reading the comments: the vibe's owner or a group member,
+      // and only for a group the vibe was posted to
+      const isOwner = lifeScore.userId === context.user.id;
+      if (!isOwner && !(await isAcceptedMember(context.user.id, groupId))) {
+        throw new Error('You must be a member of this group to mark comments read');
+      }
+
+      const lifeScoreGroup = await prisma.lifeScoreGroup.findUnique({
+        where: { lifeScoreId_groupId: { lifeScoreId, groupId } },
+      });
+      if (!lifeScoreGroup) {
+        throw new Error('This score was not posted to this group');
+      }
+
       await prisma.scoreCommentRead.upsert({
         where: {
           userId_lifeScoreId_groupId: {
@@ -549,6 +581,14 @@ export const groupResolvers = {
   },
 
   Group: {
+    // The invite code lets anyone join, so only accepted members see it (the group
+    // is also reachable by pending invitees and via LifeScore.groups)
+    inviteCode: async (parent: { id: string; inviteCode: string | null }, _: any, context: any) => {
+      if (!parent.inviteCode) return null;
+      const viewerId = viewerIdOf(context);
+      if (!viewerId) return null;
+      return (await isAcceptedMember(viewerId, parent.id)) ? parent.inviteCode : null;
+    },
     createdBy: async (parent: { createdById: string }) => {
       return await getUserById(parent.createdById);
     },
@@ -720,6 +760,36 @@ export const groupResolvers = {
     },
     joinedAt: (parent: { joinedAt: Date | null }) => {
       return parent.joinedAt?.toISOString() ?? null;
+    },
+  },
+
+  // A user's groups and pending invites are only visible to that user themselves
+  // (empty for anyone else), matching myGroups / myPendingGroupInvites
+  User: {
+    groups: async (parent: { id: string }, _: any, context: any) => {
+      if (!isViewer(context, parent.id)) return [];
+
+      const memberships = await prisma.groupMembership.findMany({
+        where: {
+          userId: parent.id,
+          status: MembershipStatus.ACCEPTED,
+        },
+        include: { group: true },
+        orderBy: { joinedAt: 'desc' },
+      });
+
+      return memberships.map((m) => m.group);
+    },
+    pendingGroupInvites: async (parent: { id: string }, _: any, context: any) => {
+      if (!isViewer(context, parent.id)) return [];
+
+      return await prisma.groupMembership.findMany({
+        where: {
+          userId: parent.id,
+          status: MembershipStatus.PENDING,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
     },
   },
 

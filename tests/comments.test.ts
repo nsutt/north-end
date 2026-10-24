@@ -155,3 +155,51 @@ describe('reactions', () => {
     assert.match(message, /logged in/);
   });
 });
+
+describe('markCommentsRead', () => {
+  const MARK_READ = `#graphql
+    mutation ($lifeScoreId: ID!, $groupId: ID!) { markCommentsRead(lifeScoreId: $lifeScoreId, groupId: $groupId) }
+  `;
+
+  test('a member of the group can mark comments read', async () => {
+    const { member, group, vibe } = await setup();
+    const data = await executeOk(MARK_READ, { lifeScoreId: vibe.id, groupId: group.id }, member);
+    assert.equal(data.markCommentsRead, true);
+    assert.equal(await prisma.scoreCommentRead.count({ where: { userId: member.id } }), 1);
+  });
+
+  test('the vibe owner can mark comments read', async () => {
+    const { owner, group, vibe } = await setup();
+    await executeOk(MARK_READ, { lifeScoreId: vibe.id, groupId: group.id }, owner);
+    assert.equal(await prisma.scoreCommentRead.count({ where: { userId: owner.id } }), 1);
+  });
+
+  test('a non-member or pending invitee cannot', async () => {
+    const { owner, outsider, group, vibe } = await setup();
+    const invitee = await createUser();
+    await prisma.groupMembership.create({ data: { groupId: group.id, userId: invitee.id, invitedById: owner.id } });
+
+    for (const user of [outsider, invitee]) {
+      const message = await executeError(MARK_READ, { lifeScoreId: vibe.id, groupId: group.id }, user);
+      assert.match(message, /must be a member/);
+    }
+    assert.equal(await prisma.scoreCommentRead.count(), 0);
+  });
+
+  test("the vibe must have been posted to the group (even the caller's own group)", async () => {
+    const { vibe } = await setup();
+    const outsider = await createUser();
+    const otherGroup = await createGroup(outsider);
+
+    const message = await executeError(MARK_READ, { lifeScoreId: vibe.id, groupId: otherGroup.id }, outsider);
+    assert.match(message, /not posted to this group/);
+    assert.equal(await prisma.scoreCommentRead.count(), 0);
+  });
+
+  test('an unknown vibe and signed-out callers are rejected', async () => {
+    const { member, group } = await setup();
+    const unknown = '00000000-0000-0000-0000-000000000000';
+    assert.match(await executeError(MARK_READ, { lifeScoreId: unknown, groupId: group.id }, member), /not found/);
+    assert.match(await executeError(MARK_READ, { lifeScoreId: unknown, groupId: group.id }), /logged in/);
+  });
+});
