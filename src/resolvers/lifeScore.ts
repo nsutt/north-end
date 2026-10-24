@@ -2,7 +2,7 @@ import { prisma } from '../lib/prisma';
 import { getUserById } from './user';
 import { MembershipStatus } from '@prisma/client';
 import { notifyNewVibe } from '../utils/notifications';
-import { viewerIdOf, visibleLifeScoresWhere } from '../utils/access';
+import { canSeeGroupThread, viewerIdOf, visibleLifeScoresWhere } from '../utils/access';
 
 export const lifeScoreResolvers = {
   Query: {
@@ -81,10 +81,14 @@ export const lifeScoreResolvers = {
       });
       return lifeScoreGroups.map((lsg) => lsg.group);
     },
+    // Per-group fields below are empty/zero/null unless the viewer can see that
+    // group's thread (accepted member of a group the vibe was posted to)
     commentCount: async (
       lifeScore: { id: string },
-      { groupId }: { groupId: string }
+      { groupId }: { groupId: string },
+      context: any
     ) => {
+      if (!(await canSeeGroupThread(viewerIdOf(context), lifeScore.id, groupId))) return 0;
       return await prisma.scoreComment.count({
         where: {
           lifeScoreId: lifeScore.id,
@@ -98,6 +102,7 @@ export const lifeScoreResolvers = {
       context: any
     ) => {
       if (!context.user) return 0;
+      if (!(await canSeeGroupThread(context.user.id, lifeScore.id, groupId))) return 0;
 
       // Get user's last read timestamp for this score in this group
       const readRecord = await prisma.scoreCommentRead.findUnique({
@@ -122,8 +127,10 @@ export const lifeScoreResolvers = {
     },
     latestComment: async (
       lifeScore: { id: string },
-      { groupId }: { groupId: string }
+      { groupId }: { groupId: string },
+      context: any
     ) => {
+      if (!(await canSeeGroupThread(viewerIdOf(context), lifeScore.id, groupId))) return null;
       return await prisma.scoreComment.findFirst({
         where: {
           lifeScoreId: lifeScore.id,

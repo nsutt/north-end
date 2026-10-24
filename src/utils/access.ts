@@ -44,3 +44,45 @@ export function visibleLifeScoresWhere(viewerId: string): Prisma.LifeScoreWhereI
     ],
   };
 }
+
+// Whether the viewer may see a vibe's per-group activity (comments, reactions,
+// counts) in `groupId`: the vibe must have been posted to that group and the viewer
+// must be an accepted member of it. This applies to the vibe's owner too, so no
+// one can read a group's thread from outside it.
+export async function canSeeGroupThread(
+  viewerId: string | null,
+  lifeScoreId: string,
+  groupId: string
+): Promise<boolean> {
+  if (!viewerId) return false;
+  const lifeScoreGroup = await prisma.lifeScoreGroup.findFirst({
+    where: {
+      lifeScoreId,
+      groupId,
+      group: {
+        memberships: {
+          some: { userId: viewerId, status: MembershipStatus.ACCEPTED },
+        },
+      },
+    },
+    select: { id: true },
+  });
+  return !!lifeScoreGroup;
+}
+
+// Groups a vibe was posted to whose threads the viewer may see (see canSeeGroupThread)
+export async function visibleThreadGroupIds(viewerId: string | null, lifeScoreId: string): Promise<string[]> {
+  if (!viewerId) return [];
+  const lifeScoreGroups = await prisma.lifeScoreGroup.findMany({
+    where: {
+      lifeScoreId,
+      group: {
+        memberships: {
+          some: { userId: viewerId, status: MembershipStatus.ACCEPTED },
+        },
+      },
+    },
+    select: { groupId: true },
+  });
+  return lifeScoreGroups.map((lsg) => lsg.groupId);
+}

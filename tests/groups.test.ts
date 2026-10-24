@@ -334,3 +334,77 @@ describe('User.groups and User.pendingGroupInvites', () => {
     assert.deepEqual(data.user, { id: alice.id, groups: [], pendingGroupInvites: [] });
   });
 });
+
+describe('Group fields for pending invitees', () => {
+  const PENDING = `#graphql
+    {
+      myPendingGroupInvites {
+        id groupId invitedBy { id displayName }
+        group {
+          id name memberCount inviteCode myRole
+          members { userId }
+          recentActivity { score }
+          myLatestScore { id }
+          unreadCommentCount
+          createdBy { id displayName email uniqueCode features lifeScores { id } currentScore { id } groups { id } }
+        }
+      }
+    }
+  `;
+
+  test('see only the invite preview (id, name, memberCount, inviter)', async () => {
+    const owner = await createUser({ displayName: 'Owner', email: 'owner@example.test', features: ['can-logout'] });
+    const member = await createUser();
+    const invitee = await createUser();
+    const group = await createGroup(owner, [member], 'Secret Club');
+    const vibe = await createLifeScore(owner, [group.id]);
+    await prisma.scoreComment.create({ data: { lifeScoreId: vibe.id, groupId: group.id, authorId: member.id, content: 'hi' } });
+    const invite = await prisma.groupMembership.create({ data: { groupId: group.id, userId: invitee.id, invitedById: owner.id } });
+
+    const data = await executeOk(PENDING, {}, invitee);
+    assert.deepEqual(data.myPendingGroupInvites, [
+      {
+        id: invite.id,
+        groupId: group.id,
+        invitedBy: { id: owner.id, displayName: 'Owner' },
+        group: {
+          id: group.id,
+          name: 'Secret Club',
+          memberCount: 2,
+          inviteCode: null,
+          myRole: null,
+          members: [],
+          recentActivity: null,
+          myLatestScore: null,
+          unreadCommentCount: 0,
+          createdBy: {
+            id: owner.id,
+            displayName: 'Owner',
+            email: null,
+            uniqueCode: null,
+            features: [],
+            lifeScores: [],
+            currentScore: null,
+            groups: [],
+          },
+        },
+      },
+    ]);
+  });
+
+  test('the same fields resolve once the invite is accepted', async () => {
+    const owner = await createUser();
+    const invitee = await createUser();
+    const group = await createGroup(owner);
+    await createLifeScore(owner, [group.id], { score: 4 });
+    await prisma.groupMembership.create({ data: { groupId: group.id, userId: invitee.id, invitedById: owner.id } });
+
+    const accepted = await executeOk(
+      `mutation ($groupId: ID!) { acceptGroupInvite(groupId: $groupId) { group { members { userId } recentActivity { score } } } }`,
+      { groupId: group.id },
+      invitee
+    );
+    assert.equal(accepted.acceptGroupInvite.group.members.length, 2);
+    assert.deepEqual(accepted.acceptGroupInvite.group.recentActivity, { score: 4 });
+  });
+});

@@ -203,3 +203,112 @@ describe('markCommentsRead', () => {
     assert.match(await executeError(MARK_READ, { lifeScoreId: unknown, groupId: group.id }), /logged in/);
   });
 });
+
+describe('per-group vibe fields', () => {
+  /**
+   * A vibe by `owner` posted to groups A and B. `viewer` is only in A, and also in C
+   * (which the vibe was not posted to). Each of A and B has a comment and a reaction.
+   */
+  async function twoGroups() {
+    const owner = await createUser();
+    const viewer = await createUser();
+    const bMember = await createUser();
+    const groupA = await createGroup(owner, [viewer], 'A');
+    const groupB = await createGroup(owner, [bMember], 'B');
+    const groupC = await createGroup(viewer, [], 'C');
+    const vibe = await createLifeScore(owner, [groupA.id, groupB.id]);
+
+    const inA = await prisma.scoreComment.create({ data: { lifeScoreId: vibe.id, groupId: groupA.id, authorId: owner.id, content: 'in A' } });
+    const inB = await prisma.scoreComment.create({ data: { lifeScoreId: vibe.id, groupId: groupB.id, authorId: bMember.id, content: 'in B' } });
+    await prisma.scoreReaction.create({ data: { lifeScoreId: vibe.id, groupId: groupA.id, userId: viewer.id, emoji: '🔥' } });
+    await prisma.scoreReaction.create({ data: { lifeScoreId: vibe.id, groupId: groupB.id, userId: bMember.id, emoji: '😢' } });
+    // A reaction the viewer left in B before being removed from it
+    await prisma.scoreReaction.create({ data: { lifeScoreId: vibe.id, groupId: groupB.id, userId: viewer.id, emoji: '👀' } });
+
+    return { owner, viewer, bMember, groupA, groupB, groupC, vibe, inA, inB };
+  }
+
+  const PER_GROUP = `#graphql
+    query ($id: ID!, $groupId: ID!) {
+      lifeScore(id: $id) {
+        comments(groupId: $groupId) { id }
+        commentCount(groupId: $groupId)
+        unreadCommentCount(groupId: $groupId)
+        latestComment(groupId: $groupId) { id }
+        reactionSummary(groupId: $groupId) { emoji count users { id } }
+        myReaction(groupId: $groupId) { emoji }
+      }
+    }
+  `;
+  const EMPTY = { comments: [], commentCount: 0, unreadCommentCount: 0, latestComment: null, reactionSummary: [], myReaction: null };
+
+  test("a member sees their group's comments and reactions", async () => {
+    const { viewer, groupA, vibe, inA } = await twoGroups();
+    const data = await executeOk(PER_GROUP, { id: vibe.id, groupId: groupA.id }, viewer);
+    assert.deepEqual(data.lifeScore, {
+      comments: [{ id: inA.id }],
+      commentCount: 1,
+      unreadCommentCount: 1,
+      latestComment: { id: inA.id },
+      reactionSummary: [{ emoji: '🔥', count: 1, users: [{ id: viewer.id }] }],
+      myReaction: { emoji: '🔥' },
+    });
+  });
+
+  test("nothing from a group the viewer isn't in, or one the vibe wasn't posted to", async () => {
+    const { viewer, groupB, groupC, vibe } = await twoGroups();
+    for (const group of [groupB, groupC]) {
+      const data = await executeOk(PER_GROUP, { id: vibe.id, groupId: group.id }, viewer);
+      assert.deepEqual(data.lifeScore, EMPTY, group.name);
+    }
+  });
+
+  test('a pending invitee of the group sees nothing from it', async () => {
+    const { owner, viewer, groupB, vibe } = await twoGroups();
+    await prisma.groupMembership.create({ data: { groupId: groupB.id, userId: viewer.id, invitedById: owner.id } });
+    const data = await executeOk(PER_GROUP, { id: vibe.id, groupId: groupB.id }, viewer);
+    assert.deepEqual(data.lifeScore, EMPTY);
+  });
+
+  test('comments without groupId only include visible groups (and their group field)', async () => {
+    const { owner, viewer, groupA, vibe, inA, inB } = await twoGroups();
+    const legacy = await prisma.scoreComment.create({ data: { lifeScoreId: vibe.id, groupId: null, authorId: owner.id, content: 'old' } });
+    const query = `query ($id: ID!) { lifeScore(id: $id) { comments { id group { id } } } }`;
+
+    const seen = await executeOk(query, { id: vibe.id }, viewer);
+    assert.deepEqual(seen.lifeScore.comments, [{ id: inA.id, group: { id: groupA.id } }]);
+
+    // The owner (a member of both groups) sees both groups' comments and legacy ones
+    const own = await executeOk(query, { id: vibe.id }, owner);
+    assert.deepEqual(
+      own.lifeScore.comments.map((c: { id: string }) => c.id).sort(),
+      [inA.id, inB.id, legacy.id].sort()
+    );
+  });
+
+  test("the owner doesn't see a group's thread after leaving it", async () => {
+    const { owner, groupB, vibe } = await twoGroups();
+    // Hand the group over and drop the owner's membership
+    const other = await createUser();
+    await prisma.group.update({ where: { id: groupB.id }, data: { createdById: other.id } });
+    await prisma.groupMembership.delete({ where: { groupId_userId: { groupId: groupB.id, userId: owner.id } } });
+
+    const data = await executeOk(PER_GROUP, { id: vibe.id, groupId: groupB.id }, owner);
+    assert.deepEqual(data.lifeScore, EMPTY);
+  });
+
+  test('the group feed still shows per-group fields to members', async () => {
+    const { viewer, groupA, vibe, inA } = await twoGroups();
+    const data = await executeOk(
+      `query ($groupId: ID!) { groupScores(groupId: $groupId) {
+        id commentCount(groupId: $groupId) latestComment(groupId: $groupId) { id }
+        reactionSummary(groupId: $groupId) { emoji } myReaction(groupId: $groupId) { emoji }
+      } }`,
+      { groupId: groupA.id },
+      viewer
+    );
+    assert.deepEqual(data.groupScores, [
+      { id: vibe.id, commentCount: 1, latestComment: { id: inA.id }, reactionSummary: [{ emoji: '🔥' }], myReaction: { emoji: '🔥' } },
+    ]);
+  });
+});

@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma';
 import { getUserById } from './user';
 import { MembershipStatus } from '@prisma/client';
 import { notifyNewComment } from '../utils/notifications';
+import { canSeeGroupThread, viewerIdOf, visibleThreadGroupIds } from '../utils/access';
 
 // Helper: Check if user is a member of a group
 async function isGroupMember(userId: string, groupId: string): Promise<boolean> {
@@ -121,15 +122,33 @@ export const scoreCommentResolvers = {
   },
 
   LifeScore: {
+    // Comments in groups whose thread the viewer can see (accepted member of a group
+    // the vibe was posted to). With groupId, just that group (empty if not visible);
+    // without, every visible group, plus legacy group-less comments for the owner.
     comments: async (
-      parent: { id: string },
-      { groupId }: { groupId?: string }
+      parent: { id: string; userId: string },
+      { groupId }: { groupId?: string },
+      context: any
     ) => {
-      // If groupId provided, filter by it; otherwise return all comments
+      const viewerId = viewerIdOf(context);
+
+      if (groupId) {
+        if (!(await canSeeGroupThread(viewerId, parent.id, groupId))) return [];
+        return await prisma.scoreComment.findMany({
+          where: { lifeScoreId: parent.id, groupId },
+          orderBy: { createdAt: 'asc' },
+        });
+      }
+
+      if (!viewerId) return [];
+      const groupIds = await visibleThreadGroupIds(viewerId, parent.id);
       return await prisma.scoreComment.findMany({
         where: {
           lifeScoreId: parent.id,
-          ...(groupId ? { groupId } : {}),
+          OR: [
+            { groupId: { in: groupIds } },
+            ...(viewerId === parent.userId ? [{ groupId: null }] : []),
+          ],
         },
         orderBy: { createdAt: 'asc' },
       });
