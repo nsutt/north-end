@@ -18,7 +18,7 @@ async function startServer() {
   const server = new ApolloServer({
     schema: schemaWithPermissions,
     includeStacktraceInErrorResponses: process.env.NODE_ENV !== 'production',
-    introspection: true,
+    introspection: process.env.NODE_ENV !== 'production',
   });
 
   await server.start();
