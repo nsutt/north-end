@@ -4,6 +4,10 @@ import jwt from 'jsonwebtoken';
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const JWT_EXPIRES_IN = '100y'; // 100 years (effectively forever)
 
+if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+  console.warn('[auth] JWT_SECRET is not set; falling back to the insecure default secret.');
+}
+
 export interface TokenPayload {
   userId: string;
 }
