@@ -27,4 +27,4 @@ services:
       - key: APNS_PRIVATE_KEY
         sync: false  # Contents of the .p8 file
       - key: APNS_BUNDLE_ID
-        value: app.vibecheck.ios
+        value: com.delight.vibecheck
