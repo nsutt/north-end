@@ -7,7 +7,7 @@ import jwt from 'jsonwebtoken';
 
 const KEY_ID = process.env.APNS_KEY_ID;
 const TEAM_ID = process.env.APNS_TEAM_ID;
-const BUNDLE_ID = process.env.APNS_BUNDLE_ID || 'app.vibecheck.ios';
+const BUNDLE_ID = process.env.APNS_BUNDLE_ID || 'com.delight.vibecheck';
 const PRIVATE_KEY = process.env.APNS_PRIVATE_KEY?.replace(/\\n/g, '\n');
 
 const HOSTS = {

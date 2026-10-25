@@ -8,7 +8,7 @@ const APPLE_ISSUER = 'https://appleid.apple.com';
 const APPLE_KEYS_URL = 'https://appleid.apple.com/auth/keys';
 
 // The app's bundle ID is the token's audience.
-const APPLE_AUDIENCE = process.env.APPLE_CLIENT_ID || process.env.APNS_BUNDLE_ID || 'app.vibecheck.ios';
+const APPLE_AUDIENCE = process.env.APPLE_CLIENT_ID || process.env.APNS_BUNDLE_ID || 'com.delight.vibecheck';
 
 export interface AppleIdentity {
   sub: string;

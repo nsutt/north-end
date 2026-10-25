@@ -24,7 +24,7 @@ import { resolveTestDatabaseUrl } from './testDatabase';
 process.env.DATABASE_URL = resolveTestDatabaseUrl();
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = 'test-jwt-secret';
-process.env.APPLE_CLIENT_ID = 'app.vibecheck.ios.test';
+process.env.APPLE_CLIENT_ID = 'com.delight.vibecheck.test';
 process.env.LIFE_SCORE_URL = 'https://vibecheck.test';
 process.env.API_URL = 'https://api.vibecheck.test';
 
