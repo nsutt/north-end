@@ -5,7 +5,7 @@ services:
     runtime: node
     env: node
     region: oregon
-    plan: free
+    plan: starter  # 0.5 CPU, always on (the free plan sleeps after inactivity)
     buildCommand: npm install --include=dev && npm run build && npm run db:push
     startCommand: npm start
     envVars:
