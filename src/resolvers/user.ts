@@ -1,6 +1,8 @@
 import { generateToken } from '../utils/auth';
 import { prisma } from '../lib/prisma';
 import { generateUniqueCodeSafe } from '../utils/codeGenerator';
+import { isViewer, viewerIdOf, visibleLifeScoresWhere } from '../utils/access';
+import { GroupRole, MembershipStatus, type Prisma } from '@prisma/client';
 
 interface CreateUserInput {
   displayName: string;
@@ -26,9 +28,12 @@ export function setViewer(context: any, userId: string) {
   context.viewerId = userId;
 }
 
-// Whether the user being resolved is the person making the request
-function isViewer(context: any, userId: string) {
-  return context.user?.id === userId || context.viewerId === userId;
+// Vibes by `userId` that the viewer may see (all of them for the user themselves)
+function lifeScoresVisibleTo(context: any, userId: string): Prisma.LifeScoreWhereInput | null {
+  if (isViewer(context, userId)) return { userId };
+  const viewerId = viewerIdOf(context);
+  if (!viewerId) return null;
+  return { userId, ...visibleLifeScoresWhere(viewerId) };
 }
 
 export const userResolvers = {
@@ -52,7 +57,6 @@ export const userResolvers = {
           avatarUrl: true,
           createdAt: true,
           updatedAt: true,
-          features: true,
         },
       });
     },
@@ -129,9 +133,54 @@ export const userResolvers = {
         throw new Error('You can only delete your own account');
       }
 
-      // Delete the user (cascade will delete all related lifeScores)
-      await prisma.user.delete({
-        where: { id },
+      await prisma.$transaction(async (tx) => {
+        // Groups they created: hand each to the longest-standing other accepted
+        // member, or delete it if nobody else is in it (Group.createdBy has no
+        // cascade, so these would otherwise block the delete)
+        const ownedGroups = await tx.group.findMany({
+          where: { createdById: id },
+          select: { id: true },
+        });
+
+        for (const group of ownedGroups) {
+          const successor = await tx.groupMembership.findFirst({
+            where: {
+              groupId: group.id,
+              userId: { not: id },
+              status: MembershipStatus.ACCEPTED,
+            },
+            orderBy: [{ joinedAt: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
+          });
+
+          if (successor) {
+            await tx.group.update({
+              where: { id: group.id },
+              data: { createdById: successor.userId },
+            });
+            await tx.groupMembership.update({
+              where: { id: successor.id },
+              data: { role: GroupRole.OWNER },
+            });
+          } else {
+            // Memberships, vibe links, comments and reactions cascade with the group;
+            // read markers have no relation, so clear them explicitly
+            await tx.scoreCommentRead.deleteMany({ where: { groupId: group.id } });
+            await tx.group.delete({ where: { id: group.id } });
+          }
+        }
+
+        // Sign-up invites they created (Invite.createdBy has no cascade). Users who
+        // signed up with one keep their accounts; their usedInviteId is set to null.
+        await tx.invite.deleteMany({ where: { createdById: id } });
+
+        // Comment read markers have no relation to users
+        await tx.scoreCommentRead.deleteMany({ where: { userId: id } });
+
+        // Delete the user (vibes, comments, reactions, memberships, worm scores and
+        // device tokens cascade; invitedBy on memberships they sent is set to null)
+        await tx.user.delete({
+          where: { id },
+        });
       });
 
       return true;
@@ -266,34 +315,43 @@ export const userResolvers = {
     authSyncedAt: (parent: { authSyncedAt: Date | null }) => {
       return parent.authSyncedAt?.toISOString() ?? null;
     },
+    // Feature flags are only visible to the user themselves (empty for others).
     // Ensure features is never null (for users created before this field existed)
-    features: (parent: { features: string[] | null }) => {
+    features: (parent: { id: string; features?: string[] | null }, _: any, context: any) => {
+      if (!isViewer(context, parent.id)) return [];
       return parent.features ?? [];
     },
-    // Resolve currentScore field
-    currentScore: async (parent: any) => {
+    // Latest vibe the viewer may see (see lifeScoresVisibleTo)
+    currentScore: async (parent: any, _: any, context: any) => {
+      const where = lifeScoresVisibleTo(context, parent.id);
+      if (!where) return null;
       const latestScore = await prisma.lifeScore.findFirst({
-        where: { userId: parent.id },
+        where,
         orderBy: { createdAt: 'desc' },
       });
       return latestScore;
     },
-    // Resolve lifeScores field
-    lifeScores: async (parent: any) => {
+    // Vibes the viewer may see: all for the user themselves, otherwise only those
+    // posted to a group the viewer is an accepted member of
+    lifeScores: async (parent: any, _: any, context: any) => {
+      const where = lifeScoresVisibleTo(context, parent.id);
+      if (!where) return [];
       return await prisma.lifeScore.findMany({
-        where: { userId: parent.id },
+        where,
         orderBy: { createdAt: 'desc' },
       });
     },
-    // Resolve usedInvite field
-    usedInvite: async (parent: { usedInviteId: string | null }) => {
+    // Resolve usedInvite field (only for the user themselves: it carries the code)
+    usedInvite: async (parent: { id: string; usedInviteId: string | null }, _: any, context: any) => {
+      if (!isViewer(context, parent.id)) return null;
       if (!parent.usedInviteId) return null;
       return await prisma.invite.findUnique({
         where: { id: parent.usedInviteId },
       });
     },
-    // Resolve invites field (invites created by this user)
-    invites: async (parent: { id: string }) => {
+    // Resolve invites field (invites created by this user; only visible to them)
+    invites: async (parent: { id: string }, _: any, context: any) => {
+      if (!isViewer(context, parent.id)) return [];
       return await prisma.invite.findMany({
         where: { createdById: parent.id },
         orderBy: { createdAt: 'desc' },

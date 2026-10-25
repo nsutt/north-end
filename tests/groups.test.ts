@@ -1,7 +1,7 @@
 import { after, beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GroupRole, MembershipStatus } from '@prisma/client';
-import { closeDatabase, createGroup, createUser, executeError, executeOk, prisma, resetDatabase } from './helpers';
+import { closeDatabase, createGroup, createLifeScore, createUser, executeError, executeOk, prisma, resetDatabase } from './helpers';
 
 beforeEach(resetDatabase);
 after(closeDatabase);
@@ -220,5 +220,191 @@ describe('createAccountAndJoinGroup', () => {
       email: 'new@example.test',
     });
     assert.match(message, /Display name is required/);
+  });
+});
+
+describe('Query.group access', () => {
+  const GROUP = `#graphql
+    query ($id: ID!) { group(id: $id) { id name inviteCode members { userId } } }
+  `;
+
+  test('an accepted member can read the group, including its invite code', async () => {
+    const owner = await createUser();
+    const member = await createUser();
+    const group = await createGroup(owner, [member]);
+
+    for (const user of [owner, member]) {
+      const data = await executeOk(GROUP, { id: group.id }, user);
+      assert.equal(data.group.id, group.id);
+      assert.equal(data.group.inviteCode, group.inviteCode);
+    }
+  });
+
+  test('a non-member or pending invitee gets "Group not found", same as a missing group', async () => {
+    const owner = await createUser();
+    const outsider = await createUser();
+    const invitee = await createUser();
+    const group = await createGroup(owner);
+    await prisma.groupMembership.create({ data: { groupId: group.id, userId: invitee.id, invitedById: owner.id } });
+
+    for (const user of [outsider, invitee]) {
+      assert.match(await executeError(GROUP, { id: group.id }, user), /^Group not found$/);
+    }
+    assert.match(
+      await executeError(GROUP, { id: '00000000-0000-0000-0000-000000000000' }, outsider),
+      /^Group not found$/
+    );
+  });
+
+  test('requires login', async () => {
+    const owner = await createUser();
+    const group = await createGroup(owner);
+    assert.match(await executeError(GROUP, { id: group.id }), /logged in/);
+  });
+});
+
+describe('Group.inviteCode', () => {
+  test('is null for a pending invitee (via myPendingGroupInvites)', async () => {
+    const owner = await createUser();
+    const invitee = await createUser();
+    const group = await createGroup(owner, [], 'Invited');
+    await prisma.groupMembership.create({ data: { groupId: group.id, userId: invitee.id, invitedById: owner.id } });
+
+    const data = await executeOk(`{ myPendingGroupInvites { group { id name memberCount inviteCode } } }`, {}, invitee);
+    assert.deepEqual(data.myPendingGroupInvites, [{ group: { id: group.id, name: 'Invited', memberCount: 1, inviteCode: null } }]);
+  });
+
+  test('is visible to members through myGroups and generateGroupInviteCode', async () => {
+    const owner = await createUser();
+    const member = await createUser();
+    const group = await createGroup(owner, [member]);
+
+    const mine = await executeOk(`{ myGroups { id inviteCode } }`, {}, member);
+    assert.deepEqual(mine.myGroups, [{ id: group.id, inviteCode: group.inviteCode }]);
+
+    const generated = await executeOk(
+      `mutation ($groupId: ID!) { generateGroupInviteCode(groupId: $groupId) { inviteCode } }`,
+      { groupId: group.id },
+      member
+    );
+    assert.ok(generated.generateGroupInviteCode.inviteCode);
+  });
+
+  test('a member of one group cannot reach another group (or its code) through a vibe', async () => {
+    const author = await createUser();
+    const viewer = await createUser();
+    const shared = await createGroup(author, [viewer], 'Shared');
+    const privateGroup = await createGroup(author, [], 'Private');
+    const vibe = await createLifeScore(author, [shared.id, privateGroup.id]);
+
+    const query = `query ($id: ID!) { lifeScore(id: $id) { groups { id inviteCode } } }`;
+    const seen = await executeOk(query, { id: vibe.id }, viewer);
+    assert.deepEqual(seen.lifeScore.groups, [{ id: shared.id, inviteCode: shared.inviteCode }]);
+
+    // The author sees every group they posted to
+    const own = await executeOk(query, { id: vibe.id }, author);
+    assert.deepEqual(own.lifeScore.groups.map((g: { id: string }) => g.id).sort(), [shared.id, privateGroup.id].sort());
+  });
+});
+
+describe('User.groups and User.pendingGroupInvites', () => {
+  const FIELDS = 'id groups { id } pendingGroupInvites { groupId status }';
+
+  test('resolve for the user themselves', async () => {
+    const owner = await createUser();
+    const alice = await createUser();
+    const joined = await createGroup(owner, [alice]);
+    const pending = await createGroup(owner);
+    await prisma.groupMembership.create({ data: { groupId: pending.id, userId: alice.id, invitedById: owner.id } });
+
+    const data = await executeOk(`{ me { ${FIELDS} } }`, {}, alice);
+    assert.deepEqual(data.me.groups, [{ id: joined.id }]);
+    assert.deepEqual(data.me.pendingGroupInvites, [{ groupId: pending.id, status: MembershipStatus.PENDING }]);
+  });
+
+  test('are empty when looking at someone else', async () => {
+    const owner = await createUser();
+    const alice = await createUser();
+    const bob = await createUser();
+    await createGroup(owner, [alice, bob]);
+    const pending = await createGroup(owner);
+    await prisma.groupMembership.create({ data: { groupId: pending.id, userId: alice.id, invitedById: owner.id } });
+
+    const data = await executeOk(`query ($id: ID!) { user(id: $id) { ${FIELDS} } }`, { id: alice.id }, bob);
+    assert.deepEqual(data.user, { id: alice.id, groups: [], pendingGroupInvites: [] });
+  });
+});
+
+describe('Group fields for pending invitees', () => {
+  const PENDING = `#graphql
+    {
+      myPendingGroupInvites {
+        id groupId invitedBy { id displayName }
+        group {
+          id name memberCount inviteCode myRole
+          members { userId }
+          recentActivity { score }
+          myLatestScore { id }
+          unreadCommentCount
+          createdBy { id displayName email uniqueCode features lifeScores { id } currentScore { id } groups { id } }
+        }
+      }
+    }
+  `;
+
+  test('see only the invite preview (id, name, memberCount, inviter)', async () => {
+    const owner = await createUser({ displayName: 'Owner', email: 'owner@example.test', features: ['can-logout'] });
+    const member = await createUser();
+    const invitee = await createUser();
+    const group = await createGroup(owner, [member], 'Secret Club');
+    const vibe = await createLifeScore(owner, [group.id]);
+    await prisma.scoreComment.create({ data: { lifeScoreId: vibe.id, groupId: group.id, authorId: member.id, content: 'hi' } });
+    const invite = await prisma.groupMembership.create({ data: { groupId: group.id, userId: invitee.id, invitedById: owner.id } });
+
+    const data = await executeOk(PENDING, {}, invitee);
+    assert.deepEqual(data.myPendingGroupInvites, [
+      {
+        id: invite.id,
+        groupId: group.id,
+        invitedBy: { id: owner.id, displayName: 'Owner' },
+        group: {
+          id: group.id,
+          name: 'Secret Club',
+          memberCount: 2,
+          inviteCode: null,
+          myRole: null,
+          members: [],
+          recentActivity: null,
+          myLatestScore: null,
+          unreadCommentCount: 0,
+          createdBy: {
+            id: owner.id,
+            displayName: 'Owner',
+            email: null,
+            uniqueCode: null,
+            features: [],
+            lifeScores: [],
+            currentScore: null,
+            groups: [],
+          },
+        },
+      },
+    ]);
+  });
+
+  test('the same fields resolve once the invite is accepted', async () => {
+    const owner = await createUser();
+    const invitee = await createUser();
+    const group = await createGroup(owner);
+    await createLifeScore(owner, [group.id], { score: 4 });
+    await prisma.groupMembership.create({ data: { groupId: group.id, userId: invitee.id, invitedById: owner.id } });
+
+    const accepted = await executeOk(
+      `mutation ($groupId: ID!) { acceptGroupInvite(groupId: $groupId) { group { members { userId } recentActivity { score } } } }`,
+      { groupId: group.id },
+      invitee
+    );
+    assert.equal(accepted.acceptGroupInvite.group.members.length, 2);
+    assert.deepEqual(accepted.acceptGroupInvite.group.recentActivity, { score: 4 });
   });
 });

@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma';
 import { getUserById } from './user';
 import { MembershipStatus } from '@prisma/client';
+import { canSeeGroupThread, viewerIdOf } from '../utils/access';
 
 // Helper: Check if user is a member of a group
 async function isGroupMember(userId: string, groupId: string): Promise<boolean> {
@@ -62,6 +63,9 @@ export const scoreReactionResolvers = {
       { groupId }: { groupId: string },
       context: any
     ) => {
+      // Only for viewers who can see this group's thread on the vibe
+      if (!(await canSeeGroupThread(viewerIdOf(context), parent.id, groupId))) return [];
+
       const reactions = await prisma.scoreReaction.findMany({
         where: {
           lifeScoreId: parent.id,
@@ -101,6 +105,7 @@ export const scoreReactionResolvers = {
       context: any
     ) => {
       if (!context.user) return null;
+      if (!(await canSeeGroupThread(context.user.id, parent.id, groupId))) return null;
 
       const reaction = await prisma.scoreReaction.findUnique({
         where: {

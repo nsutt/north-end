@@ -3,10 +3,28 @@ import { getUserById, setViewer } from './user';
 import { GroupRole, MembershipStatus } from '@prisma/client';
 import { generateToken } from '../utils/auth';
 import { generateUniqueCodeSafe } from '../utils/codeGenerator';
+import { isAcceptedMember, isViewer, viewerIdOf } from '../utils/access';
+
+// Whether the person making the request is an accepted member of the group. A Group
+// can also reach non-members (pending invitees via myPendingGroupInvites, owners of
+// a vibe via ScoreComment.group), who only get id, name and memberCount.
+async function viewerIsMember(context: any, groupId: string) {
+  const viewerId = viewerIdOf(context);
+  return !!viewerId && (await isAcceptedMember(viewerId, groupId));
+}
 
 export const groupResolvers = {
   Query: {
-    group: async (_: any, { id }: { id: string }) => {
+    group: async (_: any, { id }: { id: string }, context: any) => {
+      if (!context.user) {
+        throw new Error('You must be logged in to view a group');
+      }
+
+      // Only accepted members can read a group; don't reveal whether it exists
+      if (!(await isAcceptedMember(context.user.id, id))) {
+        throw new Error('Group not found');
+      }
+
       return await prisma.group.findUnique({
         where: { id },
       });
@@ -363,6 +381,28 @@ export const groupResolvers = {
         throw new Error('You must be logged in');
       }
 
+      const lifeScore = await prisma.lifeScore.findUnique({
+        where: { id: lifeScoreId },
+        select: { userId: true },
+      });
+      if (!lifeScore) {
+        throw new Error('Life score not found');
+      }
+
+      // Same access as reading the comments: the vibe's owner or a group member,
+      // and only for a group the vibe was posted to
+      const isOwner = lifeScore.userId === context.user.id;
+      if (!isOwner && !(await isAcceptedMember(context.user.id, groupId))) {
+        throw new Error('You must be a member of this group to mark comments read');
+      }
+
+      const lifeScoreGroup = await prisma.lifeScoreGroup.findUnique({
+        where: { lifeScoreId_groupId: { lifeScoreId, groupId } },
+      });
+      if (!lifeScoreGroup) {
+        throw new Error('This score was not posted to this group');
+      }
+
       await prisma.scoreCommentRead.upsert({
         where: {
           userId_lifeScoreId_groupId: {
@@ -549,10 +589,17 @@ export const groupResolvers = {
   },
 
   Group: {
+    // The invite code lets anyone join, so only accepted members see it (the group
+    // is also reachable by pending invitees and via LifeScore.groups)
+    inviteCode: async (parent: { id: string; inviteCode: string | null }, _: any, context: any) => {
+      if (!parent.inviteCode) return null;
+      return (await viewerIsMember(context, parent.id)) ? parent.inviteCode : null;
+    },
     createdBy: async (parent: { createdById: string }) => {
       return await getUserById(parent.createdById);
     },
-    members: async (parent: { id: string }) => {
+    members: async (parent: { id: string }, _: any, context: any) => {
+      if (!(await viewerIsMember(context, parent.id))) return [];
       return await prisma.groupMembership.findMany({
         where: {
           groupId: parent.id,
@@ -585,6 +632,7 @@ export const groupResolvers = {
     },
     myLatestScore: async (parent: { id: string }, _: any, context: any) => {
       if (!context.user) return null;
+      if (!(await viewerIsMember(context, parent.id))) return null;
 
       // Find the most recent score shared with this group by the current user
       const lifeScoreGroup = await prisma.lifeScoreGroup.findFirst({
@@ -608,6 +656,7 @@ export const groupResolvers = {
     },
     unreadCommentCount: async (parent: { id: string }, _: any, context: any) => {
       if (!context.user) return 0;
+      if (!(await viewerIsMember(context, parent.id))) return 0;
 
       // Get all scores in this group, ordered by most recent per user
       const groupScores = await prisma.lifeScoreGroup.findMany({
@@ -666,6 +715,7 @@ export const groupResolvers = {
     },
     recentActivity: async (parent: { id: string }, _: any, context: any) => {
       if (!context.user) return null;
+      if (!(await viewerIsMember(context, parent.id))) return null;
 
       // Find the most recent score in this group (including current user)
       const recentScore = await prisma.lifeScoreGroup.findFirst({
@@ -720,6 +770,36 @@ export const groupResolvers = {
     },
     joinedAt: (parent: { joinedAt: Date | null }) => {
       return parent.joinedAt?.toISOString() ?? null;
+    },
+  },
+
+  // A user's groups and pending invites are only visible to that user themselves
+  // (empty for anyone else), matching myGroups / myPendingGroupInvites
+  User: {
+    groups: async (parent: { id: string }, _: any, context: any) => {
+      if (!isViewer(context, parent.id)) return [];
+
+      const memberships = await prisma.groupMembership.findMany({
+        where: {
+          userId: parent.id,
+          status: MembershipStatus.ACCEPTED,
+        },
+        include: { group: true },
+        orderBy: { joinedAt: 'desc' },
+      });
+
+      return memberships.map((m) => m.group);
+    },
+    pendingGroupInvites: async (parent: { id: string }, _: any, context: any) => {
+      if (!isViewer(context, parent.id)) return [];
+
+      return await prisma.groupMembership.findMany({
+        where: {
+          userId: parent.id,
+          status: MembershipStatus.PENDING,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
     },
   },
 

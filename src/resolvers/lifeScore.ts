@@ -2,12 +2,19 @@ import { prisma } from '../lib/prisma';
 import { getUserById } from './user';
 import { MembershipStatus } from '@prisma/client';
 import { notifyNewVibe } from '../utils/notifications';
+import { canSeeGroupThread, viewerIdOf, visibleLifeScoresWhere } from '../utils/access';
 
 export const lifeScoreResolvers = {
   Query: {
-    lifeScore: async (_: any, { id }: { id: string }) => {
-      return await prisma.lifeScore.findUnique({
-        where: { id },
+    // Visible to the owner and to accepted members of a group it was posted to;
+    // null for anyone else (same as a vibe that doesn't exist)
+    lifeScore: async (_: any, { id }: { id: string }, context: any) => {
+      if (!context.user) {
+        throw new Error('You must be logged in to view a vibe');
+      }
+
+      return await prisma.lifeScore.findFirst({
+        where: { id, ...visibleLifeScoresWhere(context.user.id) },
       });
     },
     groupScores: async (
@@ -51,17 +58,37 @@ export const lifeScoreResolvers = {
     createdAt: (lifeScore: { createdAt: Date }) => {
       return lifeScore.createdAt.toISOString();
     },
-    groups: async (lifeScore: { id: string }) => {
+    // The owner sees every group the vibe was posted to; others only the groups
+    // they're an accepted member of
+    groups: async (lifeScore: { id: string; userId: string }, _: any, context: any) => {
+      const viewerId = viewerIdOf(context);
+      if (!viewerId) return [];
+
       const lifeScoreGroups = await prisma.lifeScoreGroup.findMany({
-        where: { lifeScoreId: lifeScore.id },
+        where: {
+          lifeScoreId: lifeScore.id,
+          ...(viewerId === lifeScore.userId
+            ? {}
+            : {
+                group: {
+                  memberships: {
+                    some: { userId: viewerId, status: MembershipStatus.ACCEPTED },
+                  },
+                },
+              }),
+        },
         include: { group: true },
       });
       return lifeScoreGroups.map((lsg) => lsg.group);
     },
+    // Per-group fields below are empty/zero/null unless the viewer can see that
+    // group's thread (accepted member of a group the vibe was posted to)
     commentCount: async (
       lifeScore: { id: string },
-      { groupId }: { groupId: string }
+      { groupId }: { groupId: string },
+      context: any
     ) => {
+      if (!(await canSeeGroupThread(viewerIdOf(context), lifeScore.id, groupId))) return 0;
       return await prisma.scoreComment.count({
         where: {
           lifeScoreId: lifeScore.id,
@@ -75,6 +102,7 @@ export const lifeScoreResolvers = {
       context: any
     ) => {
       if (!context.user) return 0;
+      if (!(await canSeeGroupThread(context.user.id, lifeScore.id, groupId))) return 0;
 
       // Get user's last read timestamp for this score in this group
       const readRecord = await prisma.scoreCommentRead.findUnique({
@@ -99,8 +127,10 @@ export const lifeScoreResolvers = {
     },
     latestComment: async (
       lifeScore: { id: string },
-      { groupId }: { groupId: string }
+      { groupId }: { groupId: string },
+      context: any
     ) => {
+      if (!(await canSeeGroupThread(viewerIdOf(context), lifeScore.id, groupId))) return null;
       return await prisma.scoreComment.findFirst({
         where: {
           lifeScoreId: lifeScore.id,
